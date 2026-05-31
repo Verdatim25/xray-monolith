@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <shared_mutex>
+#include <memory>
 #include "_noncopyable.h"
 #if 0//def DEBUG
 # define PROFILE_CRITICAL_SECTIONS

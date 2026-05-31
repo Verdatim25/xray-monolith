@@ -10,8 +10,6 @@
 #include "UICursor.h"
 #include "game_base_space.h"
 #include "level.h"
-#include "ParticlesObject.h"
-#include "game_base_space.h"
 #include "stalker_animation_data_storage.h"
 #include "stalker_velocity_holder.h"
 
@@ -42,6 +40,8 @@
 #endif // _EDITOR
 #include "gametype_chooser.h"
 
+extern BOOL mt_Scheduler;
+
 //#ifdef DEBUG_MEMORY_MANAGER
 //	static	void *	ode_alloc	(size_t size)								{ return Memory.mem_alloc(size,"ODE");			}
 //	static	void *	ode_realloc	(void *ptr, size_t oldsize, size_t newsize)	{ return Memory.mem_realloc(ptr,newsize,"ODE");	}
@@ -66,8 +66,7 @@ CGamePersistent::CGamePersistent(void)
 	ambient_effect_wind_out_time = 0.f;
 	ambient_effect_wind_on = false;
 
-	ZeroMemory(ambient_sound_next_time, sizeof(ambient_sound_next_time));
-
+    ambient_sound_next_time.reserve(32);
 
 	m_pUI_core = NULL;
 	m_pMainMenu = NULL;
@@ -83,7 +82,7 @@ CGamePersistent::CGamePersistent(void)
 	//dSetFreeHandler				(ode_free		);
 
 	// 
-	BOOL bDemoMode = (0 != strstr(Core.Params, "-demomode "));
+	BOOL bDemoMode = Core.ParamsData.test(ECoreParams::demomode);
 	if (bDemoMode)
 	{
 		string256 fname;
@@ -158,7 +157,7 @@ void CGamePersistent::OnAppStart()
 	// load game materials
 	GMLib.Load();
 	init_game_globals();
-	__super::OnAppStart();
+	inherited::OnAppStart();
 	m_pUI_core = xr_new<ui_core>();
 	m_pMainMenu = xr_new<CMainMenu>();
 	m_pWallmarksManager = xr_new<ScriptWallmarksManager>();
@@ -174,7 +173,7 @@ void CGamePersistent::OnAppEnd()
 	xr_delete(m_pUI_core);
 	xr_delete(m_pWallmarksManager);
 
-	__super::OnAppEnd();
+	inherited::OnAppEnd();
 
 	clean_game_globals();
 
@@ -183,15 +182,15 @@ void CGamePersistent::OnAppEnd()
 
 void CGamePersistent::Start(LPCSTR op)
 {
-	__super::Start(op);
+	inherited::Start(op);
 }
 
 void CGamePersistent::Disconnect()
 {
 	// destroy ambient particles
-	CParticlesObject::Destroy(ambient_particles);
+	Particles::Details::Destroy(ambient_particles);
 
-	__super::Disconnect();
+	inherited::Disconnect();
 	// stop all played emitters
 	::Sound->stop_emitters();
 	m_game_params.m_e_game_type = eGameIDNoGame;
@@ -201,7 +200,7 @@ void CGamePersistent::Disconnect()
 
 void CGamePersistent::OnGameStart()
 {
-	__super::OnGameStart();
+	inherited::OnGameStart();
 	UpdateGameType();
 }
 
@@ -257,7 +256,7 @@ EGameIDs ParseStringToGameType(LPCSTR str)
 
 void CGamePersistent::UpdateGameType()
 {
-	__super::UpdateGameType();
+	inherited::UpdateGameType();
 
 	m_game_params.m_e_game_type = ParseStringToGameType(m_game_params.m_game_type);
 
@@ -270,7 +269,7 @@ void CGamePersistent::UpdateGameType()
 
 void CGamePersistent::OnGameEnd()
 {
-	__super::OnGameEnd();
+	inherited::OnGameEnd();
 
 	xr_delete(g_stalker_animation_data_storage);
 	xr_delete(g_stalker_velocity_holder);
@@ -278,6 +277,7 @@ void CGamePersistent::OnGameEnd()
 
 void CGamePersistent::WeathersUpdate()
 {
+	PROF_EVENT("CGamePersistent WeathersUpdate");
 	if (g_pGameLevel && !g_dedicated_server)
 	{
 		CActor* actor = smart_cast<CActor*>(Level().CurrentViewEntity());
@@ -293,14 +293,19 @@ void CGamePersistent::WeathersUpdate()
 		if (env_amb)
 		{
 			CEnvAmbient::SSndChannelVec& vec = env_amb->get_snd_channels();
-			CEnvAmbient::SSndChannelVecIt I = vec.begin();
-			CEnvAmbient::SSndChannelVecIt E = vec.end();
 
-			for (u32 idx = 0; I != E; ++I, ++idx)
+			auto I = vec.cbegin();
+			const auto E = vec.cend();
+			
+			for (size_t idx = 0; I != E; ++I, ++idx)
 			{
+                if (ambient_sound_next_time.empty())
+                {
+                    break;
+                }
+
 				CEnvAmbient::SSndChannel& ch = **I;
-				R_ASSERT(idx<32);
-				if (ambient_sound_next_time[idx] == 0) //first
+				if (ambient_sound_next_time[idx] == 0)
 				{
 					ambient_sound_next_time[idx] = Device.dwTimeGlobal + ch.get_rnd_sound_first_time();
 				}
@@ -317,35 +322,15 @@ void CGamePersistent::WeathersUpdate()
 					pos.y += 10.f;
 					snd.play_at_pos(0, pos);
 
-#ifdef DEBUG
-                    if (!snd._handle() && strstr(Core.Params, "-nosound"))
-                        continue;
-#endif // DEBUG
+					if (!snd._handle() || Core.ParamsData.test(ECoreParams::nosound))
+						continue;
 
 					VERIFY(snd._handle());
 					u32 _length_ms = iFloor(snd.get_length_sec() * 1000.0f);
 					ambient_sound_next_time[idx] = Device.dwTimeGlobal + _length_ms + ch.get_rnd_sound_time();
-					//					Msg("- Playing ambient sound channel [%s] file[%s]",ch.m_load_section.c_str(),snd._handle()->file_name());
 				}
 			}
-			/*
-			            if (Device.dwTimeGlobal > ambient_sound_next_time)
-			            {
-			            ref_sound* snd			= env_amb->get_rnd_sound();
-			            ambient_sound_next_time	= Device.dwTimeGlobal + env_amb->get_rnd_sound_time();
-			            if (snd)
-			            {
-			            Fvector	pos;
-			            float	angle		= ::Random.randF(PI_MUL_2);
-			            pos.x				= _cos(angle);
-			            pos.y				= 0;
-			            pos.z				= _sin(angle);
-			            pos.normalize		().mul(env_amb->get_rnd_sound_dist()).add(Device.vCameraPosition);
-			            pos.y				+= 10.f;
-			            snd->play_at_pos	(0,pos);
-			            }
-			            }
-			            */
+			
 			// start effect
 			if ((FALSE == bIndoor) && (0 == ambient_particles) && Device.dwTimeGlobal > ambient_effect_next_time)
 			{
@@ -362,7 +347,7 @@ void CGamePersistent::WeathersUpdate()
 						wind_blast_out_time;
 					ambient_effect_wind_on = true;
 
-					ambient_particles = CParticlesObject::Create(eff->particles.c_str(), FALSE, false);
+					ambient_particles	= Particles::Details::Create(eff->particles.c_str(),FALSE,false);
 					Fvector pos;
                     Fvector offset = eff->offset;
                     offset.x += Random.randF(-5.f, 5.f);
@@ -455,7 +440,7 @@ void CGamePersistent::WeathersUpdate()
 
 		// if particles not playing - destroy
 		if (ambient_particles && !ambient_particles->IsPlaying())
-			CParticlesObject::Destroy(ambient_particles);
+			Particles::Details::Destroy(ambient_particles);
 	}
 }
 
@@ -464,7 +449,7 @@ bool allow_intro()
 #ifdef MASTER_GOLD
 	if (g_SASH.IsRunning())
 #else	// #ifdef MASTER_GOLD
-    if ((0 != strstr(Core.Params, "-nointro")) || g_SASH.IsRunning())
+    if (Core.ParamsData.test(ECoreParams::nointro) || g_SASH.IsRunning())
 #endif	// #ifdef MASTER_GOLD
 	{
 		return false;
@@ -475,14 +460,7 @@ bool allow_intro()
 
 bool allow_logo() // AVO: skip NVIDIA and other logos at load time
 {
-	if (0 != strstr(Core.Params, "-skiplogo"))
-	{
-		return false;
-	}
-	else
-	{
-		return true;
-	}
+	return !Core.ParamsData.test(ECoreParams::skiplogo);
 }
 
 void CGamePersistent::start_logo_intro()
@@ -573,7 +551,7 @@ namespace crash_saving {
 void CGamePersistent::update_game_loaded()
 {
 	xr_delete(m_intro);
-	Msg("intro_delete ::update_game_loaded");
+	load_screen_renderer.stop();
 	start_game_intro();
 
 	// demonized
@@ -628,6 +606,7 @@ extern CUISequencer* g_tutorial2;
 
 void CGamePersistent::OnFrame()
 {
+	PROF_EVENT("CGamePersistent OnFrame");
 	if (Device.dwPrecacheFrame == 5 && m_intro_event.empty())
 	{
 		m_intro_event.bind(this, &CGamePersistent::game_loaded);
@@ -740,14 +719,25 @@ void CGamePersistent::OnFrame()
 		}
 #endif // MASTER_GOLD
 	}
-	__super::OnFrame();
+	inherited::OnFrame();
 
 	if (!Device.Paused())
-		Engine.Sheduler.Update();
+	{
+		if (!mt_Scheduler)
+		{
+			PROF_EVENT("Sheduler");
+			::Engine.Sheduler.Update();
+		}
+		else
+		{
+			PROF_EVENT("Sheduler RT");
+			::Engine.Sheduler.UpdateInit();
+			::Engine.Sheduler.UpdateRT();
+		}
 
-	// update weathers ambient
-	if (!Device.Paused())
+		// update weathers ambient
 		WeathersUpdate();
+	}
 
 	if (0 != pDemoFile)
 	{
@@ -799,6 +789,7 @@ void CGamePersistent::OnEvent(EVENT E, u64 P1, u64 P2)
 {
 	if (E == eQuickLoad)
 	{
+		PROF_EVENT("eQuickLoad");
 		if (Device.Paused())
 			Device.Pause(FALSE, TRUE, TRUE, "eQuickLoad");
 
@@ -916,7 +907,10 @@ void CGamePersistent::OnRenderPPUI_PP()
 
 void CGamePersistent::LoadTitle(bool change_tip, shared_str map_name)
 {
-	pApp->LoadStage();
+    {
+        xrCriticalSectionGuard g(loadTitleCs);
+        pApp->LoadStage();
+    }
 	if (change_tip)
 	{
 		string512 buff;
@@ -990,6 +984,8 @@ void CGamePersistent::RestoreEffectorDOF()
 //	m_dof		[4];	// 0-dest 1-current 2-from 3-original
 void CGamePersistent::UpdateDof()
 {
+	PROF_EVENT("CGamePersistent UpdateDof");
+
 	static float diff_far = pSettings->r_float("zone_pick_dof", "far"); //70.0f;
 	static float diff_near = pSettings->r_float("zone_pick_dof", "near"); //-70.0f;
 

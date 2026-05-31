@@ -531,6 +531,11 @@ void map_pan_to_level(LPCSTR level_name, bool zoom_in)
 	mapWnd->SetTargetMap(shared_str(level_name), zoom_in);
 }
 
+CMapManager* get_map_manager()
+{
+	return &Level().MapManager();
+}
+
 bool patrol_path_exists(LPCSTR patrol_path)
 {
 	return (!!ai().patrol_paths().path(patrol_path, true));
@@ -838,7 +843,7 @@ bool getCamEffectorTransformData(::luabind::object& t, LPCSTR animationFile)
 		{
 			COMotion M;
 			if (M.LoadMotion(full_path)) {
-				std::map<EChannelType, std::string> mapOrder;
+				xr_map<EChannelType, xr_string> mapOrder;
 				mapOrder[EChannelType::ctPositionX] = "positionX";
 				mapOrder[EChannelType::ctPositionY] = "positionY";
 				mapOrder[EChannelType::ctPositionZ] = "positionZ";
@@ -1120,9 +1125,14 @@ void refresh_npc_names()
 			if (g_pGameLevel)
 			{
 				CObject* obj = g_pGameLevel->Objects.net_Find(it->first);
-				CInventoryOwner* owner = smart_cast<CInventoryOwner*>(obj);
-				if (owner)
-					owner->refresh_npc_name();
+				if (obj)
+				{
+					CInventoryOwner* owner = smart_cast<CInventoryOwner*>(obj);
+					if (owner)
+					{
+						owner->refresh_npc_name();
+					}
+				}
 			}
 		}
 	}
@@ -1208,9 +1218,26 @@ void stop_tutorial()
 		g_tutorial->Stop();
 }
 
+LPCSTR tutorial_name()
+{
+	if (g_tutorial)
+		return g_tutorial->m_name;
+	return "invalid";
+}
+
 LPCSTR translate_string(LPCSTR str)
 {
 	return *CStringTable().translate(str);
+}
+
+void patrol_path_add(LPCSTR patrol_path, CPatrolPath* path)
+{
+	ai().patrol_paths_raw().add_path(shared_str(patrol_path), path);
+}
+
+void patrol_path_remove(LPCSTR patrol_path)
+{
+	ai().patrol_paths_raw().remove_path(shared_str(patrol_path));
 }
 
 bool has_active_tutotial()
@@ -2530,6 +2557,7 @@ void CLevel::script_register(lua_State* L)
 			def("map_remove_object_spot", map_remove_object_spot),
 			def("map_has_object_spot", map_has_object_spot),
 			def("map_change_spot_hint", map_change_spot_hint),
+			def("map_manager", get_map_manager),
 
 			// demonized: remove all map object spots by id
 			def("map_remove_all_object_spots", map_remove_all_object_spots),
@@ -2619,7 +2647,10 @@ void CLevel::script_register(lua_State* L)
 			def("get_attachment", &GetAttachment),
 			def("remove_attachment", (void (*)(LPCSTR)) &RemoveAttachment),
 			def("remove_attachment", (void (*)(script_attachment*)) &RemoveAttachment),
-			def("iterate_attachments", &IterateAttachments)
+			def("iterate_attachments", &IterateAttachments),
+
+			def("patrol_path_add", &patrol_path_add),
+			def("patrol_path_remove", &patrol_path_remove)
 		],
 
 		module(L, "actor_stats")
@@ -2768,6 +2799,7 @@ void CLevel::script_register(lua_State* L)
 		def("start_tutorial", &start_tutorial),
 		def("stop_tutorial", &stop_tutorial),
 		def("has_active_tutorial", &has_active_tutotial),
+		def("active_tutorial_name", &tutorial_name),
 		def("translate_string", &translate_string),
 		def("reload_language", &reload_language),
 		def("get_resolutions", &vid_modes_string),

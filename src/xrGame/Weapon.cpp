@@ -5,7 +5,6 @@
 
 #include "stdafx.h"
 #include "Weapon.h"
-#include "ParticlesObject.h"
 #include "entity_alive.h"
 #include "inventory_item_impl.h"
 #include "inventory.h"
@@ -217,10 +216,10 @@ void CWeapon::UpdateXForm()
 		boneL = boneR2;
 
 	V->CalculateBones_Invalidate();
-	V->CalculateBones(TRUE);
+	// V->CalculateBones(TRUE);
 
-	Fmatrix& mL = V->LL_GetTransform(u16(boneL));
-	Fmatrix& mR = V->LL_GetTransform(u16(boneR));
+	Fmatrix& mL = V->LL_GetTransform_safed(u16(boneL));
+	Fmatrix& mR = V->LL_GetTransform_safed(u16(boneR));
 	// Calculate
 	Fmatrix mRes;
 	Fvector R, D, N;
@@ -1202,6 +1201,7 @@ void CWeapon::OnEvent(NET_Packet& P, u16 type)
 
 void CWeapon::shedule_Update(u32 dT)
 {
+	PROF_EVENT("CWeapon::shedule_Update");
 	// Queue shrink
 	//	u32	dwTimeCL		= Level().timeServer()-NET_Latency;
 	//	while ((NET.size()>2) && (NET[1].dwTimeStamp<dwTimeCL)) NET.pop_front();
@@ -1242,12 +1242,14 @@ void CWeapon::OnH_A_Independent()
 	inherited::OnH_A_Independent();
 	Light_Destroy();
 	UpdateAddonsVisibility();
+	//Engine.Sheduler.Register(this);
 };
 
 void CWeapon::OnH_A_Chield()
 {
 	inherited::OnH_A_Chield();
 	UpdateAddonsVisibility();
+	//Engine.Sheduler.Unregister(this);
 };
 
 void CWeapon::OnActiveItem()
@@ -1261,7 +1263,7 @@ void CWeapon::OnActiveItem()
 	//-
 
 	inherited::OnActiveItem();
-	//åñëè ìû çàíðóæàåìñÿ è îðóæèå áûëî â ðóêàõ
+	//если мы заряжаемся и оружие было в руках
 	//.	SetState					(eIdle);
 	//.	SetNextState				(eIdle);
 }
@@ -1404,20 +1406,20 @@ bool CWeapon::need_renderable()
 	return !Device.m_SecondViewport.IsSVPFrame() && !(IsZoomed() && ZoomTexture() && !IsRotatingToZoom());
 }
 
-void CWeapon::renderable_Render()
+void CWeapon::renderable_Render(IDSGraphManager* DM)
 {
-	UpdateXForm();
+	//UpdateXForm();
 
-	//íàðèñîâàòü ïîäñâåòêó
-	RenderLight();
-
-	//åñëè ìû â ðåæèìå ñíàéïåðêè, òî ñàì HUD ðèñîâàòü íå íàäî
+	//если мы в режиме снайперки, то сам HUD рисовать не надо
 	if (IsZoomed() && !IsRotatingToZoom() && ZoomTexture())
 		RenderHud(FALSE);
 	else
 		RenderHud(TRUE);
 
-	inherited::renderable_Render();
+	inherited::renderable_Render(DM);
+
+	//нарисовать подсветку
+	RenderLight();
 }
 
 void CWeapon::signal_HideComplete()
@@ -2138,8 +2140,9 @@ CUIWindow* CWeapon::ZoomTexture()
 	else
 	{
 		scope_2dtexactive = 0; //crookr
-		return NULL;
+		return nullptr;
 	}
+	//return nullptr; //UseScopeTexture() ? m_UIScope : nullptr;
 }
 
 void CWeapon::SwitchState(u32 S)
@@ -3001,6 +3004,9 @@ void CWeapon::modify_holder_params(float& range, float& fov) const
 
 bool CWeapon::render_item_ui_query()
 {
+    if (!m_pInventory)
+        return false;
+
 	bool b_is_active_item = (m_pInventory->ActiveItem() == this);
 	bool res = b_is_active_item && IsZoomed() && ZoomHideCrosshair() && ZoomTexture() && !IsRotatingToZoom();
 	return res;

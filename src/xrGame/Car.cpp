@@ -1,9 +1,5 @@
 #include "stdafx.h"
 #include "car.h"
-//#if 0
-
-#include "ParticlesObject.h"
-//#include "Physics.h"
 
 #ifdef DEBUG
 #	include "../xrEngine/StatGraph.h"
@@ -209,8 +205,7 @@ void CCar::Load(LPCSTR section)
 {
 	inherited::Load(section);
 	//CPHSkeleton::Load(section);
-	ISpatial* self = smart_cast<ISpatial*>(this);
-	if (self) self->spatial.type |= STYPE_VISIBLEFORAI;
+	SpatialComponent->spatial.type |= STYPE_VISIBLEFORAI;
 
 #ifdef CAR_NEW
 	{
@@ -293,17 +288,7 @@ BOOL CCar::net_Spawn(CSE_Abstract* DC)
 		m_memory->reload(pUserData->r_string("visual_memory_definition", "section"));
 	}
 	
-	renderable.visual->flags.set(IRenderVisualFlags::eIgnoreOptimization, TRUE);
-
-	xr_vector<IRenderVisual*>* children = renderable.visual->get_children();
-
-	if (children)
-	{
-		for (auto* child : *children)
-		{
-			child->flags.set(IRenderVisualFlags::eIgnoreOptimization, TRUE);
-		}
-	}
+    renderable.visual->MarkIgnoreOptimization(TRUE);
 
 #ifdef CAR_NEW
 	CInifile *ini = Visual()->dcast_PKinematics()->LL_UserData();
@@ -651,9 +636,9 @@ void CCar::VisualUpdate(float fov)
 	m_lights.Update();
 }
 
-void CCar::renderable_Render()
+void CCar::renderable_Render(IDSGraphManager* DM)
 {
-	inherited::renderable_Render();
+	inherited::renderable_Render(DM);
 	if (m_car_weapon)
 		m_car_weapon->Render_internal();
 }
@@ -674,7 +659,7 @@ void CCar::net_Import(NET_Packet& P)
 	//	P.w_u32 (NumItems);
 }
 
-void CCar::OnHUDDraw(CCustomHUD* /**hud*/)
+void CCar::OnHUDDraw(CCustomHUD* hud, IDSGraphManager* DM)
 {
 #ifdef DEBUG
 	Fvector velocity;
@@ -1998,7 +1983,7 @@ void CCar::PhDataUpdate(float step)
 		SDoor* D = m_doors_update[k];
 		if (!D->update)
 		{
-			m_doors_update.erase(m_doors_update.begin() + k);
+			m_doors_update.erase_fast(m_doors_update.begin() + k);
 			--k;
 		}
 		else
@@ -2149,6 +2134,7 @@ IC void CCar::fill_exhaust_vector(LPCSTR S, xr_vector<SExhaust>& exhausts)
 	IKinematics* pKinematics = smart_cast<IKinematics*>(Visual());
 	string64 S1;
 	int count = _GetItemCount(S);
+    exhausts.reserve(count);
 	for (int i = 0; i < count; ++i)
 	{
 		_GetItem(S, i, S1);

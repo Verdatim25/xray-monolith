@@ -87,13 +87,7 @@ void CGameObject::init()
 void CGameObject::Load(LPCSTR section)
 {
 	inherited::Load(section);
-	ISpatial* self = smart_cast<ISpatial*>(this);
-	if (self)
-	{
-		// #pragma todo("to Dima: All objects are visible for AI ???")
-		// self->spatial.type	|=	STYPE_VISIBLEFORAI;	
-		self->spatial.type &= ~STYPE_REACTTOSOUND;
-	}
+	SpatialComponent->spatial.type &= ~STYPE_REACTTOSOUND;
 }
 
 void CGameObject::reinit()
@@ -132,8 +126,12 @@ void CGameObject::net_Destroy()
 	xr_delete(m_ini_file);
 
 	m_script_clsid = -1;
-	if (Visual() && smart_cast<IKinematics*>(Visual()))
-		smart_cast<IKinematics*>(Visual())->Callback(0, 0);
+    if (Visual() && Visual()->dcast_PKinematics())
+    {
+        IKinematics* K = Visual()->dcast_PKinematics();
+        K->Callback(0, 0);
+        ::Render->remove_SkeletonWallmarksFromObject(K);
+    }
 
 	inherited::net_Destroy();
 	setReady(FALSE);
@@ -292,8 +290,7 @@ BOOL CGameObject::net_Spawn(CSE_Abstract* DC)
 
 		if (visual->flags.test(CSE_Visual::flObstacle))
 		{
-			ISpatial* self = smart_cast<ISpatial*>(this);
-			self->spatial.type |= STYPE_OBSTACLE;
+			SpatialComponent->spatial.type |= STYPE_OBSTACLE;
 		}
 	}
 
@@ -379,9 +376,9 @@ BOOL CGameObject::net_Spawn(CSE_Abstract* DC)
 	{
 		m_server_flags = O->m_flags;
 		if (O->m_flags.is(CSE_ALifeObject::flVisibleForAI))
-			spatial.type |= STYPE_VISIBLEFORAI;
+			SpatialComponent->spatial.type |= STYPE_VISIBLEFORAI;
 		else
-			spatial.type = (spatial.type | STYPE_VISIBLEFORAI) ^ STYPE_VISIBLEFORAI;
+			SpatialComponent->spatial.type = (SpatialComponent->spatial.type | STYPE_VISIBLEFORAI) ^ STYPE_VISIBLEFORAI;
 	}
 
 	reload(*cNameSect());
@@ -624,7 +621,7 @@ void CGameObject::setup_parent_ai_locations(bool assign_position)
 {
 	//	CGameObject				*l_tpGameObject	= static_cast<CGameObject*>(H_Root());
 	VERIFY(H_Parent());
-	CGameObject* l_tpGameObject = static_cast<CGameObject*>(H_Parent());
+	CGameObject* l_tpGameObject = H_Parent()->cast_game_object();
 	VERIFY(l_tpGameObject);
 
 	// get parent's position
@@ -700,7 +697,7 @@ void CGameObject::validate_ai_locations(bool decrement_reference)
 
 void CGameObject::spatial_move()
 {
-	if (H_Parent())
+	if (H_Parent() && !getVisible() && !getEnabled())
 		setup_parent_ai_locations();
 	else if (Visual())
 		validate_ai_locations();
@@ -745,16 +742,15 @@ void			CGameObject::dbg_DrawSkeleton	()
 }
 #endif
 
-void CGameObject::renderable_Render()
+void CGameObject::renderable_Render(IDSGraphManager* DM)
 {
-	inherited::renderable_Render();
-	::Render->set_Transform(&XFORM());
-	::Render->add_Visual(Visual());
+	inherited::renderable_Render(DM);
+	DM->add_Dynamic(Visual(), &XFORM());
 	Visual()->getVisData().hom_frame = Device.dwFrame;
-	RenderAttachments();
+	RenderAttachments(DM);
 }
 
-void CGameObject::RenderAttachments()
+void CGameObject::RenderAttachments(IDSGraphManager* DM)
 {
 	if (m_script_attachments.size())
 	{
@@ -763,7 +759,7 @@ void CGameObject::RenderAttachments()
 			script_attachment* att = pair.second;
 			if (att->GetType() == eSA_World)
 			{
-				att->Render(Visual()->dcast_PKinematics(), &XFORM());
+				att->Render(Visual()->dcast_PKinematics(), &XFORM(), DM);
 
 				if (::Render->get_generation() == ::Render->GENERATION_R1)
 					g_pGamePersistent->AttachmentUIsToRender.push_back(att);
@@ -1076,6 +1072,7 @@ void CGameObject::DestroyObject()
 
 void CGameObject::shedule_Update(u32 dt)
 {
+	PROF_EVENT();
 	//уничтожить
 	if (NeedToDestroyObject())
 	{

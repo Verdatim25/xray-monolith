@@ -71,9 +71,8 @@ namespace CDB
 		};
 
 	private:
-		xrCriticalSection cs;
 		Opcode::OPCODE_Model* tree;
-		u32 status; // 0=ready, 1=init, 2=building
+		xr_atomic_bool status; // 0=ready, 1=init, 2=building
 
 		// tris
 		TRI* tris;
@@ -90,14 +89,13 @@ namespace CDB
 		IC const TRI* get_tris() const { return tris; }
 		IC TRI* get_tris() { return tris; }
 		IC int get_tris_count() const { return tris_count; }
-		IC void syncronize() const
+		xr_task_group async_cform_load;
+		IC void syncronize()
 		{
 			if (S_READY != status)
 			{
 				Log ("! WARNING: syncronized CDB::query");
-				xrCriticalSection* C = (xrCriticalSection*)&cs;
-				C->Enter();
-				C->Leave();
+				async_cform_load.wait();
 			}
 		}
 
@@ -173,11 +171,23 @@ namespace CDB
 	//
 	class XRCDB_API Collector
 	{
+	public:
+#pragma pack(push,1)
+		struct edge
+		{
+			u32 face_id;
+			u32 edge_id;
+			u32 vertex_id0;
+			u32 vertex_id1;
+		};
+#pragma pack(pop)
+
 		xr_vector<Fvector> verts;
 		xr_vector<TRI> faces;
+		xr_vector<edge>		edges;
 
 		u32 VPack(const Fvector& V, float eps);
-	public:
+
 		void add_face(const Fvector& v0, const Fvector& v1, const Fvector& v2, u16 material, u16 sector);
 		void add_face_D(const Fvector& v0, const Fvector& v1, const Fvector& v2, u32 dummy);
 		void add_face_packed(const Fvector& v0, const Fvector& v1, const Fvector& v2, u16 material, u16 sector,
@@ -190,6 +200,7 @@ namespace CDB
 		size_t getVS() { return verts.size(); }
 		TRI* getT() { return &*faces.begin(); }
 		size_t getTS() { return faces.size(); }
+		ICF void			reserve			(u32 tris_size){ faces.reserve(tris_size); verts.reserve(tris_size*3); }
 
 		void clear()
 		{

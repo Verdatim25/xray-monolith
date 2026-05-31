@@ -65,6 +65,7 @@ bool pred_find_elem(const CCF_Skeleton::SElement& E, u16 elem)
 
 bool CCF_Skeleton::_ElementCenter(u16 elem_id, Fvector& e_center)
 {
+	xrSRWLockGuard guard(&build_lock, true);
 	ElementVecIt it = std::lower_bound(elements.begin(), elements.end(), elem_id, pred_find_elem);
 	if (it->elem_id == elem_id)
 	{
@@ -130,9 +131,10 @@ void CCF_Skeleton::BuildState()
 	dwFrame = Device.dwFrame;
 	IRenderVisual* pVisual = owner->Visual();
 	IKinematics* K = PKinematics(pVisual);
-	K->CalculateBones();
+	//K->CalculateBones();
 	const Fmatrix& L2W = owner->XFORM();
 
+	xrSRWLockGuard guard(&build_lock, false);
 	if (vis_mask != K->LL_GetBonesVisible())
 	{
 		vis_mask = K->LL_GetBonesVisible();
@@ -149,6 +151,7 @@ void CCF_Skeleton::BuildState()
 		}
 	}
 
+    xrCriticalSectionGuard g(K->UCalc_Mutex);
 	for (ElementVecIt I = elements.begin(); I != elements.end(); I++)
 	{
 		if (!I->valid()) continue;
@@ -227,6 +230,7 @@ void CCF_Skeleton::BuildTopLevel()
 
 BOOL CCF_Skeleton::_RayQuery(const collide::ray_defs& Q, collide::rq_results& R)
 {
+	PROF_EVENT("CCF_Skeleton::_RayQuery");
 	if (dwFrameTL != Device.dwFrame) BuildTopLevel();
 
 
@@ -415,14 +419,14 @@ void CCF_Shape::_BoxQuery(const Fbox& B, const Fmatrix& M, u32 flags)
 */
 void CCF_Shape::add_sphere(Fsphere& S)
 {
-	shapes.push_back(shape_def());
+	shapes.emplace_back();
 	shapes.back().type = 0;
 	shapes.back().data.sphere.set(S);
 }
 
 void CCF_Shape::add_box(Fmatrix& B)
 {
-	shapes.push_back(shape_def());
+	shapes.emplace_back();
 	shapes.back().type = 1;
 	shapes.back().data.box.set(B);
 	shapes.back().data.ibox.invert(B);
