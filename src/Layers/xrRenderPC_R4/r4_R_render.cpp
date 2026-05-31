@@ -3,6 +3,8 @@
 #include "../xrRender/FBasicVisual.h"
 #include "../../xrEngine/customhud.h"
 #include "../../xrEngine/xr_object.h"
+#include "../xrRender/SkeletonCustom.h"
+#include "../../xrParticles/ParticlesAsyncManager.h"
 
 #include "../xrRender/QueryHelper.h"
 #include "../xrRender/r__dsgraph_build.cpp"
@@ -11,6 +13,7 @@
 #include "../../gamedata/shaders/r3/scope_defines.h"
 #endif
 
+<<<<<<< HEAD
 IC bool pred_sp_sort(ISpatial* _1, ISpatial* _2)
 {
 	float d1 = _1->spatial.sphere.P.distance_to_sqr(Device.vCameraPosition);
@@ -177,6 +180,8 @@ void CRender::render_main(Fmatrix& m_ViewProjection, bool _fportals)
 	}
 }
 
+=======
+>>>>>>> pip_test
 void CRender::render_menu()
 {
 	PIX_EVENT(render_menu);
@@ -206,7 +211,7 @@ void CRender::render_menu()
 
 	Fvector2 p0, p1;
 	u32 Offset;
-	u32 C = color_rgba(255, 255, 255, 255);
+	auto C = color_rgba(255, 255, 255, 255);
 	float _w = float(Device.dwWidth);
 	float _h = float(Device.dwHeight);
 	float d_Z = EPS_S;
@@ -693,7 +698,11 @@ void CRender::combineGBuffer() {
 
 void CRender::Render()
 {
+<<<<<<< HEAD
 	VERIFY(0 == mapDistort.size() + mapHUDDistort.size());
+=======
+	PIX_EVENT(CRender_Render);
+>>>>>>> pip_test
 
 	rmNormal();
 
@@ -718,6 +727,9 @@ void CRender::Render()
 
 	if (m_bFirstFrameAfterReset)
 	{
+		for (light* L : v_all_lights)//critical!!!
+			L->m_moving_frames = 0;
+
 		m_bFirstFrameAfterReset = false;
 		return;
 	}
@@ -727,18 +739,18 @@ void CRender::Render()
 	// Configure
 	RImplementation.o.distortion = FALSE; // disable distorion
 	Fcolor sun_color = ((light*)Lights.sun_adapted._get())->color;
+<<<<<<< HEAD
 	bSUN = ps_r2_ls_flags.test(R2FLAG_SUN) && (u_diffuse2s(sun_color.r, sun_color.g, sun_color.b) > EPS) && !strstr(Core.Params, "-r4_dev");
+=======
+	BOOL bSUN = ps_r2_ls_flags.test(R2FLAG_SUN) && (u_diffuse2s(sun_color.r, sun_color.g, sun_color.b)>EPS) && !Core.ParamsData.test(ECoreParams::r4_dev);
+>>>>>>> pip_test
 	if (o.sunstatic) bSUN = FALSE;
 	// Msg						("sstatic: %s, sun: %s",o.sunstatic?;"true":"false", bSUN?"true":"false");
 
 	ViewBase.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
-	View = 0;
-	if (!ps_r2_ls_flags.test(R2FLAG_EXP_MT_CALC))
-	{
-		HOM.Enable();
-		HOM.Render(ViewBase);
-	}
+    HOM.MT_RENDER();
 
+<<<<<<< HEAD
 	//*******
 	// Sync point
 	Device.Statistic->RenderDUMP_Wait_S.Begin();
@@ -804,9 +816,182 @@ void CRender::Render()
 			TargetSVP->SetActive();
 			combineLightingAndBloom();
 		}
+=======
+	Target->phase_scene_prepare();
+
+
+	//******* Main calc - DEFERRER RENDERER
+	phase = PHASE_NORMAL;
+	
+	/*if (RImplementation.o.ssfx_core) // SSS23: DEPRECATED
+	{
+		// HUD Masking rendering
+		FLOAT ColorRGBA[4] = { 1.0f, 0.0f, 0.0f, 1.0f };
+		HW.pContext->ClearRenderTargetView(Target->rt_ssfx_hud->pRT, ColorRGBA);
+
+		Target->u_setrt(Target->rt_ssfx_hud, NULL, NULL, HW.pBaseZB);
+		r_dsgraph_render_hud(true);
+
+		// Reset Depth
+		HW.pContext->ClearDepthStencilView(HW.pBaseZB, D3D_CLEAR_DEPTH, 1.0f, 0);
+	}*/
+
+    GMBase.traverse(RImplementation.pLastSector, ViewBase, Device.vCameraPosition, Device.mFullTransform);
+    GMBase.r_dsgraph_capture_static();
+    GMBase.r_dsgraph_capture_dynamic();
+
+    if (RImplementation.o.ssfx_motionvectors)
+    {
+        Target->u_setrt(Device.dwWidth, Device.dwHeight, 0, 0, Target->rt_ssfx_motion_vectors->pRT, 0);
+
+        FLOAT ColorRGBA[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+        HW.pContext->ClearRenderTargetView(Target->rt_ssfx_motion_vectors->pRT, ColorRGBA);
+
+        RCache.set_Stencil(FALSE);
+        g_pGamePersistent->Environment().RenderSky(true);
+
+        RCache.Index.Flush();
+        RCache.Vertex.Flush();
+
+        RCache.set_xform_world(Fidentity);
+    }
+
+	if (ps_r2_ls_flags.test(R2FLAG_TERRAIN_PREPASS))
+	{
+		Target->u_setrt(Device.dwWidth, Device.dwHeight, NULL, NULL, NULL, !RImplementation.o.dx10_msaa ? HW.pBaseZB : Target->rt_MSAADepth->pZRT);
+	}
+
+	//******* Main render :: PART-0	-- first
+	{
+		PIX_EVENT(DEFER_PART0_SPLIT);
+		// level, SPLIT
+		Target->phase_scene_begin();
+		GMBase.r_dsgraph_render_static(0);
+		GMBase.r_dsgraph_render_dynamic(0);
+		Target->disable_aniso();
+	}
+
+	//  Redotix99: for 3D Shader Based Scopes 	
+	if (scope_3D_fake_enabled)
+	{
+		ID3D11Resource* zbuffer_res;
+		HW.pBaseZB->GetResource(&zbuffer_res);
+		HW.pContext->CopyResource(RImplementation.Target->rt_tempzb->pSurface, zbuffer_res);
+	}
+
+	if (RImplementation.o.dx10_msaa)
+		RCache.set_ZB(RImplementation.Target->rt_MSAADepth->pZRT);
+
+	{
+		PIX_EVENT(DEFER_TEST_LIGHT_VIS);
+		//******* Occlusion testing of volume-limited light-sources
+		Target->phase_occq();
+		LP_normal.clear();
+		LP_pending.clear();
+		GMBase.r_dsgraph_capture_lights();
+	}
+
+	//******* Main render :: PART-1 (second)
+	{
+		PIX_EVENT(DEFER_PART1_SPLIT);
+		// level
+		Target->phase_scene_begin();
+		GMBase.r_dsgraph_capture_hud();
+		GMBase.r_dsgraph_render_hud();
+		GMBase.r_dsgraph_render_lods(true,true);
+		if (Details) Details->Render();
+		Target->phase_scene_end();
+	}
+
+	// Wall marks
+	if (Wallmarks)
+	{
+		PIX_EVENT(DEFER_WALLMARKS);
+		Target->phase_wallmarks();
+
+		Wallmarks->Render(); // wallmarks has priority as normal geometry
+	}
+
+	// full screen pass to mark msaa-edge pixels in highest stencil bit
+	if (RImplementation.o.dx10_msaa)
+	{
+		PIX_EVENT(MARK_MSAA_EDGES);
+		Target->mark_msaa_edges();
+	}
+
+	//	TODO: DX10: Implement DX10 rain.
+	if (ps_r2_ls_flags.test(R3FLAG_DYN_WET_SURF))
+	{
+		PIX_EVENT(DEFER_RAIN);
+		render_rain();
 	}
 
 	{
+		// Save previus and current matrices
+		{
+			static Fmatrix mm_saved_viewproj;
+
+			if (!Device.m_SecondViewport.IsSVPFrame())
+			{
+				Target->Matrix_previous.mul(mm_saved_viewproj, Device.mInvView);
+				Target->Matrix_current.set(Device.mProject);
+				mm_saved_viewproj.set(Device.mFullTransform);
+			}
+		}
+
+		if (RImplementation.o.ssfx_sss && !Device.m_SecondViewport.IsSVPFrame())
+		{
+			static bool sss_rendered, sss_extended_rendered;
+
+			// SSS Shadows
+			if (ps_ssfx_sss_quality.z > 0)
+			{
+				Target->phase_ssfx_sss();
+				sss_rendered = true;
+			}
+			else
+			{
+				if (sss_rendered) // Clear buffer
+				{
+					sss_rendered = false;
+					FLOAT ColorRGBA[4] = { 1,1,1,1 };
+					HW.pContext->ClearRenderTargetView(Target->rt_ssfx_sss->pRT, ColorRGBA);
+				}
+			}
+
+			if (ps_ssfx_sss_quality.w > 0)
+			{
+				// Extra lights
+				Target->phase_ssfx_sss_ext(RImplementation.LP_normal);
+				sss_extended_rendered = true;
+			}
+			else
+			{
+				if (sss_extended_rendered) // Clear buffer
+				{
+					sss_extended_rendered = false;
+					FLOAT ColorRGBA[4] = { 1,1,1,1 };
+					HW.pContext->ClearRenderTargetView(Target->rt_ssfx_sss_tmp->pRT, ColorRGBA);
+				}
+			}
+		}
+	}
+
+	// Directional light - fucking sun
+	if (bSUN) //bSUN && Device.dwFrame & 1 --Delayed sun update. Worth to check it in future
+	{
+		PIX_EVENT(DEFER_SUN);
+		RImplementation.stats.l_visible ++;
+		render_sun_cascades();
+		Target->increment_light_marker();
+		Target->accum_direct_blend();
+>>>>>>> pip_test
+	}
+
+	phase = PHASE_NORMAL;
+
+	{
+<<<<<<< HEAD
 		PIX_EVENT(DRAW_SHADOWMAPS);
 		TargetMain->SetActive();
 		renderShadowmaps();
@@ -824,45 +1009,120 @@ void CRender::Render()
 			combineGBuffer();
 			ps_dev_param_7.y = nvg_tube_radius;
 		}		
+=======
+		PIX_EVENT(DEFER_SELF_ILLUM);
+		Target->phase_accumulator();
+		// Render emissive geometry, stencil - write 0x0 at pixel pos
+		RCache.set_xform_project(Device.mProject);
+		RCache.set_xform_view(Device.mView);
+		// Stencil - write 0x1 at pixel pos - 
+		if (!RImplementation.o.dx10_msaa)
+			RCache.set_Stencil(TRUE, D3DCMP_ALWAYS, 0x01, 0xff, 0xff, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE,
+			                   D3DSTENCILOP_KEEP);
+		else
+			RCache.set_Stencil(TRUE, D3DCMP_ALWAYS, 0x01, 0xff, 0x7f, D3DSTENCILOP_KEEP, D3DSTENCILOP_REPLACE,
+			                   D3DSTENCILOP_KEEP);
+		//RCache.set_Stencil				(TRUE,D3DCMP_ALWAYS,0x00,0xff,0xff,D3DSTENCILOP_KEEP,D3DSTENCILOP_REPLACE,D3DSTENCILOP_KEEP);
+		RCache.set_CullMode(CULL_CCW);
+		RCache.set_ColorWriteEnable();
+		GMBase.r_dsgraph_render_emissive(RImplementation.o.ssfx_bloom ? false : true);
+	}
+
+	if (RImplementation.o.ssfx_bloom)
+	{
+		// Render Emissive on `rt_ssfx_bloom_emissive`
+		FLOAT ColorRGBA[4] = { 0,0,0,0 };
+		HW.pContext->ClearRenderTargetView(Target->rt_ssfx_bloom_emissive->pRT, ColorRGBA);
+		Target->u_setrt(Target->rt_ssfx_bloom_emissive, NULL, NULL, !RImplementation.o.dx10_msaa ? HW.pBaseZB : Target->rt_MSAADepth->pZRT);
+		GMBase.r_dsgraph_render_emissive(true, true);
+>>>>>>> pip_test
 	}
 
 	TargetMain->SetActive();
 	{
+<<<<<<< HEAD
 		PIX_EVENT(COMBINE_MAIN);
 		combineGBuffer();
 	}
 
 	Target->phase_scope_debug();
+=======
+		PIX_EVENT(DEFER_LIGHT_NO_OCCQ);
+		Target->phase_accumulator();
+		render_lights(LP_normal);
+	}
+
+	// Lighting, dependant on OCCQ
+	{
+		PIX_EVENT(DEFER_LIGHT_OCCQ);
+		render_lights(LP_pending);
+	}
+
+	{
+		if (RImplementation.o.ssfx_volumetric)
+			Target->phase_ssfx_volumetric_blur();
+	}
+
+	phase = PHASE_NORMAL;
+
+	// Postprocess
+	{
+		PIX_EVENT(DEFER_LIGHT_COMBINE);
+		Target->phase_combine();
+	}
+>>>>>>> pip_test
 
 	if (Details)
 		Details->details_clear();
 
-	VERIFY(0 == mapDistort.size() + mapHUDDistort.size());
+	if (g_hud)
+	{
+        PROF_EVENT("render_hud");
+		if (g_hud->RenderActiveItemUIQuery())
+			GMBase.r_dsgraph_render_hud_ui();
+		if (g_hud->RenderCamAttachedUIQuery())
+			GMBase.r_dsgraph_render_cam_ui();
+	}
+
 }
+#include "../xrRender/CHudInitializer.h"
 
 void CRender::render_forward()
 {
-	VERIFY(0 == mapDistort.size() + mapHUDDistort.size());
 	RImplementation.o.distortion = RImplementation.o.distortion_enabled; // enable distorion
 
 	//******* Main render - second order geometry (the one, that doesn't support deffering)
 	//.todo: should be done inside "combine" with estimation of of luminance, tone-mapping, etc.
 	{
 		// level
-		r_pmask(false, true); // enable priority "1"
 		phase = PHASE_NORMAL;
-		render_main(Device.mFullTransform, false); //
 		//	Igor: we don't want to render old lods on next frame.
-		mapLOD.clear();
-		r_dsgraph_render_graph(1); // normal level, secondary priority
-		PortalTraverser.fade_render(); // faded-portals
-		r_dsgraph_render_sorted(); // strict-sorted geoms
-		//g_pGamePersistent->Environment().RenderLast(); // rain/thunder-bolts
+		GMBase.r_dsgraph_render_static(1); // normal level, secondary priority
+		CParticlesAsync::Wait();
+		GMBase.r_dsgraph_render_dynamic(1);
+		GMBase.fade_render(); // faded-portals
+		GMBase.r_dsgraph_render_sorted(false); // strict-sorted geoms
+		g_pGamePersistent->Environment().RenderLast(); // rain/thunder-bolts
+		GMBase.r_dsgraph_render_sorted_hud();
 	}
 
 	RImplementation.o.distortion = FALSE; // disable distorion
 }
 
+<<<<<<< HEAD
+=======
+// Redotix99: for 3D Shader Based Scopes
+void CRender::render_Reticle()
+{
+	VERIFY(0 == GMBase.RGraph.mapHUDSorted.Distort.size() + GMBase.RGraph.mapStaticSorted.Distort.size() + GMBase.RGraph.mapDynamicSorted.Distort.size());
+	RImplementation.o.distortion = RImplementation.o.distortion_enabled;
+
+	GMBase.r_dsgraph_render_ScopeSorted();
+
+	RImplementation.o.distortion = FALSE;
+}
+
+>>>>>>> pip_test
 void CRender::RenderToTarget(RRT target)
 {
 	ref_rt* RT = nullptr;

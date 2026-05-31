@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "profiler.h"
 
 #ifdef PROFILE_CRITICAL_SECTIONS
 static add_profile_portion_callback add_profile_portion = 0;
@@ -54,6 +55,7 @@ extern void OutputDebugStackTrace(const char* header);
 
 void xrCriticalSection::Enter()
 {
+	//PROF_EVENT("xrCriticalSection::Enter");
 #ifdef PROFILE_CRITICAL_SECTIONS
 # if 0//def DEBUG
     static bool show_call_stack = false;
@@ -62,16 +64,18 @@ void xrCriticalSection::Enter()
 # endif // DEBUG
     profiler temp(m_id);
 #endif // PROFILE_CRITICAL_SECTIONS
-	EnterCriticalSection((CRITICAL_SECTION*)pmutex);
+    EnterCriticalSection((CRITICAL_SECTION*)pmutex);
 }
 
 void xrCriticalSection::Leave()
 {
+	//PROF_EVENT("xrCriticalSection::Leave");
 	LeaveCriticalSection((CRITICAL_SECTION*)pmutex);
 }
 
 BOOL xrCriticalSection::TryEnter()
 {
+	//PROF_EVENT("xrCriticalSection::TryEnter");
 	return TryEnterCriticalSection((CRITICAL_SECTION*)pmutex);
 }
 
@@ -85,4 +89,70 @@ xrCriticalSection::raii::raii(xrCriticalSection* critical_section)
 xrCriticalSection::raii::~raii()
 {
 	critical_section->Leave();
+}
+
+xrSRWLock::xrSRWLock()
+{
+    InitializeSRWLock(&smutex);
+}
+
+void xrSRWLock::AcquireExclusive()
+{
+	PROF_EVENT("xrSRWLock::AcquireExclusive");
+    AcquireSRWLockExclusive(&smutex);
+}
+
+void xrSRWLock::ReleaseExclusive()
+{
+	PROF_EVENT("xrSRWLock::ReleaseExclusive");
+    ReleaseSRWLockExclusive(&smutex);
+}
+
+void xrSRWLock::AcquireShared()
+{
+	PROF_EVENT("xrSRWLock::AcquireShared");
+    AcquireSRWLockShared(&smutex);
+}
+
+void xrSRWLock::ReleaseShared()
+{
+	PROF_EVENT("xrSRWLock::ReleaseShared");
+    ReleaseSRWLockShared(&smutex);
+}
+
+BOOL xrSRWLock::TryAcquireExclusive()
+{
+    return TryAcquireSRWLockExclusive(&smutex);
+}
+
+BOOL xrSRWLock::TryAcquireShared()
+{
+    return TryAcquireSRWLockShared(&smutex);
+}
+
+
+xrSRWLockGuard::xrSRWLockGuard(xrSRWLock* lock, bool shared)
+    : lock(lock), shared(shared)
+{
+    if (shared)
+        lock->AcquireShared();
+    else
+        lock->AcquireExclusive();
+}
+
+xrSRWLockGuard::xrSRWLockGuard(xrSRWLock& lock, bool shared)
+    : lock(&lock), shared(shared)
+{
+    if (shared)
+        lock.AcquireShared();
+    else
+        lock.AcquireExclusive();
+}
+
+xrSRWLockGuard::~xrSRWLockGuard()
+{
+    if (shared)
+        lock->ReleaseShared();
+    else
+        lock->ReleaseExclusive();
 }

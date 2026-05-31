@@ -14,11 +14,6 @@
 #include "ParticlesObject.h"
 #include "hudsound.h"
 
-// GhenTuong: on_explode callback
-#ifndef CEXPLOSIVE_CHANGE
-#define CEXPLOSIVE_CHANGE
-#endif
-
 class IRender_Light;
 DEFINE_VECTOR(CPhysicsShellHolder*, BLASTED_OBJECTS_V, BLASTED_OBJECTS_I);
 
@@ -188,15 +183,13 @@ protected:
 		shared_str effect_sect_name;
 	} effector;
 
-#ifdef CEXPLOSIVE_CHANGE
+#ifdef EXPLOSIVE_CHANGE
 	shared_str m_on_explode_callback;
+	void LoadExplosiveSection(LPCSTR section);
+	void LoadExplosiveSection(CInifile *ini, LPCSTR section);
 #endif
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CExplosive)
-#undef script_type_list
-#define script_type_list save_type_list(CExplosive)
 
 IC void random_point_in_object_box(Fvector& out_pos, CObject* obj)
 {

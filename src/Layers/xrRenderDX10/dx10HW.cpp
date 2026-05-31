@@ -41,12 +41,11 @@ IDirect3DStateBlock9*	dwDebugSB = 0;
 #endif
 */
 
-LPCSTR dxgiOld = "--dxgi-old";
-
 CHW::CHW() :
     //	hD3D(NULL),
 	//pD3D(NULL),
 	m_pAdapter(0),
+	m_pOutput(nullptr),
 	pDevice(NULL),
 #if defined(USE_DX11)
 	m_move_window(true),
@@ -70,6 +69,70 @@ CHW::~CHW()
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
+
+void CHW::AcquireDefaultOutput()
+{
+    VERIFY(m_pAdapter);
+    R_CHK(m_pAdapter->EnumOutputs(0, &m_pOutput));
+}
+
+IDXGIOutput* CHW::FindOutputOnCurrentAdapter(HMONITOR hMon)
+{
+    if (!m_pAdapter || !hMon)
+        return nullptr;
+
+    UINT oi = 0;
+    IDXGIOutput* pOut = nullptr;
+    while (m_pAdapter->EnumOutputs(oi, &pOut) != DXGI_ERROR_NOT_FOUND)
+    {
+        DXGI_OUTPUT_DESC desc;
+        if (SUCCEEDED(pOut->GetDesc(&desc)) && desc.Monitor == hMon)
+        {
+            return pOut;
+        }
+        _RELEASE(pOut);
+        ++oi;
+    }
+    return nullptr;
+}
+
+#if defined(USE_DX11)
+void CHW::SelectAdapterAndOutput(HMONITOR hTargetMonitor)
+{
+    m_pAdapter = nullptr;
+    m_pOutput  = nullptr;
+
+    // Iterate adapters x outputs; pick the pair whose output owns hTargetMonitor.
+    for (UINT ai = 0;; ++ai)
+    {
+        IDXGIAdapter1* adapter = nullptr;
+        if (m_pFactory->EnumAdapters1(ai, &adapter) == DXGI_ERROR_NOT_FOUND)
+            break;
+
+        for (UINT oi = 0;; ++oi)
+        {
+            IDXGIOutput* output = nullptr;
+            if (adapter->EnumOutputs(oi, &output) == DXGI_ERROR_NOT_FOUND)
+                break;
+
+            DXGI_OUTPUT_DESC desc;
+            if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == hTargetMonitor)
+            {
+                m_pAdapter = adapter;
+                m_pOutput  = output;
+                return;
+            }
+            output->Release();
+        }
+        adapter->Release();
+    }
+
+    Msg("!HW: selected monitor not found on any adapter, falling back to default");
+    R_CHK(m_pFactory->EnumAdapters1(0, &m_pAdapter));
+    AcquireDefaultOutput();
+}
+#endif
+
 void CHW::CreateD3D()
 {
     /*	Partially implemented dynamic load
@@ -100,6 +163,7 @@ void CHW::CreateD3D()
 #endif
 
     m_pAdapter    = 0;
+    m_pOutput     = nullptr;
     m_bUsePerfhud = false;
 
 #ifndef MASTER_GOLD
@@ -117,6 +181,7 @@ void CHW::CreateD3D()
 		if(!wcscmp(desc.Description,L"NVIDIA PerfHUD"))
 		{
             m_bUsePerfhud = true;
+            AcquireDefaultOutput();
             break;
 		}
 		else
@@ -130,9 +195,42 @@ void CHW::CreateD3D()
 
     if (!m_pAdapter) {
 #if defined(USE_DX11)
-        m_pFactory->EnumAdapters1(0, &m_pAdapter);
+        SelectAdapterAndOutput(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY));
 #elif defined(USE_DX10)
-        pFactory->EnumAdapters(0, &m_pAdapter);
+        const HMONITOR hTarget = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
+        bool found = false;
+        for (UINT ai = 0; !found; ++ai)
+        {
+            IDXGIAdapter* adapter = nullptr;
+            if (pFactory->EnumAdapters(ai, &adapter) == DXGI_ERROR_NOT_FOUND)
+                break;
+
+            for (UINT oi = 0; !found; ++oi)
+            {
+                IDXGIOutput* output = nullptr;
+                if (adapter->EnumOutputs(oi, &output) == DXGI_ERROR_NOT_FOUND)
+                    break;
+
+                DXGI_OUTPUT_DESC desc;
+                if (SUCCEEDED(output->GetDesc(&desc)) && desc.Monitor == hTarget)
+                {
+                    m_pAdapter = adapter;
+                    m_pOutput  = output;
+                    found = true;
+                    break;
+                }
+                output->Release();
+            }
+            if (!found)
+                adapter->Release();
+        }
+
+        if (!found)
+        {
+            Msg("!HW: selected monitor not found on any adapter, falling back to default (DX10)");
+            R_CHK(pFactory->EnumAdapters(0, &m_pAdapter));
+            AcquireDefaultOutput();
+        }
 #endif
     }
 
@@ -185,6 +283,9 @@ void CHW::DestroyD3D()
 {
     //_RELEASE					(this->pD3D);
 
+    _SHOW_REF("refCount:m_pOutput", m_pOutput);
+    _RELEASE(m_pOutput);
+
     _SHOW_REF("refCount:m_pAdapter", m_pAdapter);
     _RELEASE(m_pAdapter);
 
@@ -200,7 +301,7 @@ extern u32 g_screenmode;
 
 void CHW::CreateDevice(HWND hwnd, bool move_window)
 {
-#ifdef USE_DX11
+#if defined(USE_DX10) || defined(USE_DX11)
     m_hWnd = hwnd;
 #endif
     m_move_window = move_window;
@@ -333,7 +434,7 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
 
     if ((D3DFMT_UNKNOWN==fTarget) || (D3DFMT_UNKNOWN==fTarget))	{
 		Msg					("Failed to initialize graphics hardware.\nPlease try to restart the game.");
-		FlushLog			();
+		xrLogger::FlushLog();
 		MessageBox			(NULL,"Failed to initialize graphics hardware.\nPlease try to restart the game.","Error!",MB_OK|MB_ICONERROR);
 		TerminateProcess	(GetCurrentProcess(),0);
     }
@@ -452,7 +553,7 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     };
 
     UINT create_device_flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-    if (strstr(Core.Params, "--dxgi-dbg")) {
+    if (Core.ParamsData.test(ECoreParams::dxgi_dbg)) {
         // enables d3d11 debug layer validation and output
         // viewable in VS debugger `Output > Debug` view or using a tool like Sysinternals DebugView
         create_device_flags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -546,7 +647,7 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
             "Please try to restart the game.\n"
 		    "CreateDevice returned 0x%08x", R
 		);
-        FlushLog();
+        xrLogger::FlushLog();
 		MessageBox(NULL, "Failed to initialize graphics hardware.\nPlease try to restart the game.", "Error!",
             MB_OK | MB_ICONERROR);
         TerminateProcess(GetCurrentProcess(), 0);
@@ -583,8 +684,8 @@ void CHW::CreateDevice(HWND hwnd, bool move_window)
     // probably the sequence ResizeTarget, ResizeBuffers, and UpdateViews is important
     
     // u32	memory									= pDevice->GetAvailableTextureMem	();
-    if (strstr(Core.Params, dxgiOld)) {
-        Msg("* %s enabled", dxgiOld);
+    if (Core.ParamsData.test(ECoreParams::dxgi_old)) {
+        Msg("* %s enabled", "dxgi-old");
         UpdateViews();
         size_t memory = Desc.DedicatedVideoMemory;
         Msg("*     Texture memory: %d M", memory / (1024 * 1024));
@@ -636,7 +737,7 @@ void CHW::DestroyDevice()
     if (!is_windowed) {
         m_pSwapChain->SetFullscreenState(FALSE, NULL);
 
-        if (strstr(Core.Params, dxgiOld)) {
+        if (Core.ParamsData.test(ECoreParams::dxgi_old)) {
 #ifdef USE_DX11
             const auto& cd = m_ChainDesc;
             CHK_DX(m_pSwapChain->ResizeBuffers(
@@ -694,7 +795,13 @@ void CHW::Reset(HWND hwnd)
     cd.Windowed = bWindowed;
 #endif
 
-    m_pSwapChain->SetFullscreenState(!bWindowed, NULL);
+    if (!bWindowed)
+    {
+        ShowWindow(hwnd, SW_SHOWNORMAL);
+        SetForegroundWindow(hwnd);
+    }
+
+    m_pSwapChain->SetFullscreenState(!bWindowed, bWindowed ? NULL : m_pOutput);
 
 #if defined(USE_DX11)
     selectResolution(cd.Width, cd.Height, bWindowed);
@@ -841,6 +948,7 @@ D3DFORMAT CHW::selectDepthStencil(D3DFORMAT fTarget)
 }
 
 extern void GetMonitorResolution(u32& horizontal, u32& vertical);
+extern void GetMonitorPosition(int& x, int& y);
 
 void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
 {
@@ -849,12 +957,19 @@ void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
     if (psCurrentVidMode[0] == 0 || psCurrentVidMode[1] == 0)
         GetMonitorResolution(psCurrentVidMode[0], psCurrentVidMode[1]);
 
-	if (bWindowed)
+	if (g_screenmode == 0)
+	{
+		RECT clientRect;
+		GetClientRect(Device.m_hWnd, &clientRect);
+		dwWidth = clientRect.right;
+		dwHeight = clientRect.bottom;
+	}
+	else if (g_screenmode == 1)
 	{
 		dwWidth = psCurrentVidMode[0];
-        dwHeight = psCurrentVidMode[1];
+		dwHeight = psCurrentVidMode[1];
 	}
-	else //check
+	else
     {
         string64 buff;
         xr_sprintf(buff, sizeof(buff), "%dx%d", psCurrentVidMode[0], psCurrentVidMode[1]);
@@ -915,7 +1030,7 @@ DXGI_RATIONAL CHW::selectRefresh(u32 dwWidth, u32 dwHeight, DXGI_FORMAT fmt)
 
     float CurrentFreq = 60.0f;
 
-	if (psDeviceFlags.is(rsRefresh60hz) || strstr(Core.Params, "-60hz"))
+	if (psDeviceFlags.is(rsRefresh60hz) || Core.ParamsData.test(ECoreParams::_60hz))
 	{
         refresh_rate = 1.f / 60.f;
         return res;
@@ -923,22 +1038,18 @@ DXGI_RATIONAL CHW::selectRefresh(u32 dwWidth, u32 dwHeight, DXGI_FORMAT fmt)
 
     xr_vector<DXGI_MODE_DESC> modes;
 
-    IDXGIOutput* pOutput;
-    m_pAdapter->EnumOutputs(0, &pOutput);
-    VERIFY(pOutput);
+    VERIFY(m_pOutput);
 
 	UINT num = 0;
     DXGI_FORMAT format = fmt;
 	UINT flags = 0;
 
     // Get the number of display modes available
-    pOutput->GetDisplayModeList(format, flags, &num, 0);
+    m_pOutput->GetDisplayModeList(format, flags, &num, 0);
 
     // Get the list of display modes
     modes.resize(num);
-    pOutput->GetDisplayModeList(format, flags, &num, &modes.front());
-
-    _RELEASE(pOutput);
+    m_pOutput->GetDisplayModeList(format, flags, &num, &modes.front());
 
 	for (u32 i = 0; i < num; ++i)
 	{
@@ -977,17 +1088,19 @@ void CHW::OnAppActivate()
 
 	if (m_pSwapChain && !is_windowed)
 	{
-#if defined(USE_DX11)
         ShowWindow(m_hWnd, SW_RESTORE);
-#elif defined(USE_DX10)
-        ShowWindow(m_ChainDesc.OutputWindow, SW_RESTORE);
-#endif
-        m_pSwapChain->SetFullscreenState(TRUE, NULL);
+        m_pSwapChain->SetFullscreenState(TRUE, m_pOutput);
 
 #ifdef USE_DX11
+<<<<<<< HEAD
         if (!strstr(Core.Params, dxgiOld)) {
             _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
             _RELEASE(SECRET_P_BASE_ZB);
+=======
+        if (!Core.ParamsData.test(ECoreParams::dxgi_old)) {
+            _SHOW_REF("refCount:pBaseZB", pBaseZB);
+            _RELEASE(pBaseZB);
+>>>>>>> pip_test
 
             _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
             _RELEASE(SECRET_P_BASE_RT);
@@ -1031,9 +1144,15 @@ void CHW::OnAppDeactivate()
         m_pSwapChain->SetFullscreenState(FALSE, NULL);
 
 #ifdef USE_DX11
+<<<<<<< HEAD
         if (!strstr(Core.Params, dxgiOld)) {
             _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
             _RELEASE(SECRET_P_BASE_ZB);
+=======
+        if (!Core.ParamsData.test(ECoreParams::dxgi_old)) {
+            _SHOW_REF("refCount:pBaseZB", pBaseZB);
+            _RELEASE(pBaseZB);
+>>>>>>> pip_test
 
             _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
             _RELEASE(SECRET_P_BASE_RT);
@@ -1056,11 +1175,7 @@ void CHW::OnAppDeactivate()
         UpdateViews();
 #endif
 
-#if defined(USE_DX11)
         ShowWindow(m_hWnd, SW_MINIMIZE);
-#elif defined(USE_DX10)
-        ShowWindow(m_ChainDesc.OutputWindow, SW_MINIMIZE);
-#endif
     }
 }
 
@@ -1079,18 +1194,25 @@ BOOL CHW::support(D3DFORMAT fmt, DWORD type, DWORD usage)
 
 void CHW::updateWindowProps(HWND m_hWnd)
 {
-	//	BOOL	bWindowed				= strstr(Core.Params,"-dedicated") ? TRUE : !psDeviceFlags.is	(rsFullscreen);
     BOOL bWindowed = (g_screenmode != 2);
 
-    u32 dwWindowStyle = 0;
     // Set window properties depending on what mode were in.
 	if (bWindowed)
 	{
 		if (m_move_window)
 		{
-            dwWindowStyle = WS_BORDER | WS_VISIBLE;
-            if (!strstr(Core.Params, "-no_dialog_header"))
-                dwWindowStyle |= WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX;
+            u32 dwWindowStyle = 0;
+		    if (g_screenmode == 1)
+		    {
+		        dwWindowStyle |= WS_POPUP;
+		    }
+		    else
+		    {
+		        dwWindowStyle |= WS_BORDER | WS_OVERLAPPEDWINDOW;
+		        if (!Core.ParamsData.test(ECoreParams::no_dialog_header))
+		            dwWindowStyle |= WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX;
+		    }
+
             SetWindowLong(m_hWnd, GWL_STYLE, dwWindowStyle);
             // When moving from fullscreen to windowed mode, it is important to
             // adjust the window size after recreating the device rather than
@@ -1101,31 +1223,31 @@ void CHW::updateWindowProps(HWND m_hWnd)
             // changed to 1024x768, because windows cannot be larger than the
             // desktop.
 
-            RECT m_rcWindowBounds;
-            RECT DesktopRect;
+		    u32 monW, monH;
+		    GetMonitorResolution(monW, monH);
+		    int monX, monY;
+		    GetMonitorPosition(monX, monY);
 
-            GetClientRect(GetDesktopWindow(), &DesktopRect);
+		    if (psCurrentVidMode[0] == 0 || psCurrentVidMode[1] == 0)
+		        GetMonitorResolution(psCurrentVidMode[0], psCurrentVidMode[1]);
+		    LONG res_width = g_screenmode == 0 ? psCurrentVidMode[0] : monW;
+		    LONG res_height = g_screenmode == 0 ? psCurrentVidMode[1] : monH;
 
-#if defined(USE_DX11)
-            UINT res_width  = m_ChainDesc.Width;
-            UINT res_height = m_ChainDesc.Height;
-#elif defined(USE_DX10)
-            UINT res_width  = m_ChainDesc.BufferDesc.Width;
-            UINT res_height = m_ChainDesc.BufferDesc.Height;
-#endif
+		    RECT m_rcWindowBounds;
+			RECT DesktopRect;
+
+			GetClientRect(GetDesktopWindow(), &DesktopRect);
 
 			SetRect(&m_rcWindowBounds,
-                (DesktopRect.right - res_width) / 2,
-                (DesktopRect.bottom - res_height) / 2,
-                (DesktopRect.right + res_width) / 2,
-                (DesktopRect.bottom + res_height) / 2);
-
-            AdjustWindowRect(&m_rcWindowBounds, dwWindowStyle, FALSE);
+                (LONG(monW) - res_width) / 2,
+                (LONG(monH) - res_height) / 2,
+                (monW + res_width) / 2,
+                (monH + res_height) / 2);
 
 			SetWindowPos(m_hWnd,
                 HWND_NOTOPMOST,
-                m_rcWindowBounds.left,
-                m_rcWindowBounds.top,
+                monX + m_rcWindowBounds.left,
+                monY + m_rcWindowBounds.top,
                 (m_rcWindowBounds.right - m_rcWindowBounds.left),
                 (m_rcWindowBounds.bottom - m_rcWindowBounds.top),
                 SWP_SHOWWINDOW | SWP_NOCOPYBITS | SWP_DRAWFRAME);
@@ -1133,7 +1255,7 @@ void CHW::updateWindowProps(HWND m_hWnd)
 	}
 	else
 	{
-        SetWindowLong(m_hWnd, GWL_STYLE, dwWindowStyle = (WS_POPUP | WS_VISIBLE));
+        SetWindowLong(m_hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
     }
 
     ShowCursor(FALSE);
@@ -1246,23 +1368,18 @@ void fill_vid_mode_list(CHW* _hw)
 	xr_vector<LPCSTR> _tmp;
     xr_vector<DXGI_MODE_DESC> modes;
 
-    IDXGIOutput* pOutput;
-    //_hw->m_pSwapChain->GetContainingOutput(&pOutput);
-    _hw->m_pAdapter->EnumOutputs(0, &pOutput);
-    VERIFY(pOutput);
+    VERIFY(_hw->m_pOutput);
 
 	UINT num = 0;
 	DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
 	UINT flags = 0;
 
     // Get the number of display modes available
-	pOutput->GetDisplayModeList(format, flags, &num, 0);
+	_hw->m_pOutput->GetDisplayModeList(format, flags, &num, 0);
 
     // Get the list of display modes
 	modes.resize(num);
-	pOutput->GetDisplayModeList(format, flags, &num, &modes.front());
-
-    _RELEASE(pOutput);
+	_hw->m_pOutput->GetDisplayModeList(format, flags, &num, &modes.front());
 
 	for (u32 i = 0; i < num; ++i)
 	{

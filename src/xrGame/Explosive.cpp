@@ -76,7 +76,7 @@ CExplosive::CExplosive(void)
 	m_bDynamicParticles = FALSE;
 	m_pExpParticle = NULL;
 
-#ifdef CEXPLOSIVE_CHANGE
+#ifdef EXPLOSIVE_CHANGE
 	m_on_explode_callback._set("");
 #endif
 }
@@ -168,7 +168,7 @@ void CExplosive::Load(CInifile const* ini, LPCSTR section)
 	if (ini->line_exist(section, "dynamic_explosion_particles"))
 		m_bDynamicParticles = ini->r_bool(section, "dynamic_explosion_particles");
 
-#ifdef CEXPLOSIVE_CHANGE
+#ifdef EXPLOSIVE_CHANGE
 	m_on_explode_callback._set(READ_IF_EXISTS(ini, r_string, section, "on_explode", ""));
 #endif
 }
@@ -390,9 +390,8 @@ void CExplosive::Explode()
 	Fvector::generate_orthonormal_basis(explode_matrix.j, explode_matrix.i, explode_matrix.k);
 	explode_matrix.c.set(pos);
 
-	CParticlesObject* pStaticPG;
-	pStaticPG = CParticlesObject::Create(*m_sExplodeParticles, !m_bDynamicParticles);
-	if (m_bDynamicParticles) m_pExpParticle = pStaticPG;
+	intrusive_ptr<CParticlesObject> pStaticPG = Particles::Details::Create(*m_sExplodeParticles,!m_bDynamicParticles);
+	if (m_bDynamicParticles) m_pExpParticle = pStaticPG.get();
 	pStaticPG->UpdateParent(explode_matrix, vel);
 	pStaticPG->Play(false);
 
@@ -443,13 +442,13 @@ void CExplosive::Explode()
 	//взрывная волна
 	////////////////////////////////
 	//---------------------------------------------------------------------
-	xr_vector<ISpatial*> ISpatialResult;
+	xr_vector<ISpatialShared> ISpatialResult;
 	g_SpatialSpace->q_sphere(ISpatialResult, 0, STYPE_COLLIDEABLE, pos, m_fBlastRadius);
 
 	m_blasted_objects.clear();
 	for (u32 o_it = 0; o_it < ISpatialResult.size(); o_it++)
 	{
-		ISpatial* spatial = ISpatialResult[o_it];
+		ISpatialShared spatial = ISpatialResult[o_it];
 		//		feel_touch_new(spatial->dcast_CObject());
 
 		CPhysicsShellHolder* pGameObject = smart_cast<CPhysicsShellHolder*>(spatial->dcast_CObject());
@@ -571,7 +570,7 @@ void CExplosive::OnAfterExplosion()
 	if (m_pExpParticle)
 	{
 		m_pExpParticle->Stop();
-		CParticlesObject::Destroy(m_pExpParticle);
+		Particles::Details::Destroy(m_pExpParticle);
 		m_pExpParticle = NULL;
 	}
 	//ликвидировать сам объект 
@@ -585,7 +584,7 @@ void CExplosive::OnAfterExplosion()
 
 void CExplosive::OnBeforeExplosion()
 {
-#ifdef CEXPLOSIVE_CHANGE
+#ifdef EXPLOSIVE_CHANGE
 	if (m_on_explode_callback.size())
 	{
 		::luabind::functor<void> lua_function;
@@ -624,6 +623,9 @@ void CExplosive::OnEvent(NET_Packet& P, u16 type)
 	{
 	case GE_GRENADE_EXPLODE:
 		{
+			if (m_explosion_flags.test(flExploding))
+				break;
+
 			Fvector pos, normal;
 			u16 parent_id;
 			P.r_u16(parent_id);
@@ -866,3 +868,15 @@ bool CExplosive::Useful() const
 {
 	return m_explosion_flags.flags == 0;
 }
+
+#ifdef EXPLOSIVE_CHANGE
+void CExplosive::LoadExplosiveSection(LPCSTR section)
+{
+	CExplosive::Load(pSettings, section);
+}
+
+void CExplosive::LoadExplosiveSection(CInifile *ini, LPCSTR section)
+{
+	CExplosive::Load(ini, section);
+}
+#endif

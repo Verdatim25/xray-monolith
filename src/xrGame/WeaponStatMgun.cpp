@@ -89,6 +89,7 @@ CWeaponStatMgun::CWeaponStatMgun()
 	m_single_shot_wpn = FALSE;
 	m_unlimited_ammo = true;
 	m_reload_consume_callback = nullptr;
+	m_shot_effector._set("");
 
 	m_next_ammoType_on_reload.reset();
 	m_ammoType = 0;
@@ -97,6 +98,7 @@ CWeaponStatMgun::CWeaponStatMgun()
 
 	fireDispersionOwnerScale = 1.0F;
 	m_on_before_use_callback = nullptr;
+    m_on_range_fov_callback = "";
 #endif
 
 	m_firing_disabled = false;
@@ -220,6 +222,7 @@ void CWeaponStatMgun::Load(LPCSTR section)
 	m_single_shot_wpn = !!READ_IF_EXISTS(pSettings, r_bool, section, "is_single_shot_wpn", FALSE);
 	m_unlimited_ammo = !!READ_IF_EXISTS(pSettings, r_bool, section, "unlimited_ammo", false);
 	m_reload_consume_callback = READ_IF_EXISTS(pSettings, r_string, section, "reload_consume", nullptr);
+	m_shot_effector._set(READ_IF_EXISTS(pSettings, r_string, section, "shot_effector", ""));
 
 	m_ammoTypes.clear();
 	LPCSTR ammo_class = pSettings->r_string(section, "ammo_class");
@@ -244,6 +247,10 @@ void CWeaponStatMgun::Load(LPCSTR section)
 	{
 		m_on_before_use_callback = READ_IF_EXISTS(pSettings, r_string, cNameSect_str(), "on_before_use", "");
 	}
+    if (pSettings->line_exist(cNameSect_str(), "on_range_fov"))
+    {
+        m_on_range_fov_callback = READ_IF_EXISTS(pSettings, r_string, cNameSect_str(), "on_range_fov", "");
+    }
 
 	UpdateBulletVisibility(iAmmoElapsed);
 
@@ -253,12 +260,13 @@ void CWeaponStatMgun::Load(LPCSTR section)
 		LPCSTR str = pSettings->r_string(cNameSect_str(), "barrels");
 		string128 sec;
 		int n = _GetItemCount(str);
+        m_barrels.reserve(n);
 		for (int i = 0; i < n; ++i)
 		{
 			_GetItem(str, i, sec);
 			if (strlen(sec))
 			{
-				m_barrels.push_back(SStmBarrel(this, sec));
+				m_barrels.emplace_back(this, sec);
 				m_barrels.back().Load(cNameSect_str());
 			}
 		}
@@ -435,17 +443,14 @@ void CWeaponStatMgun::net_Destroy()
 	{
 		if (p_overheat->IsPlaying())
 			p_overheat->Stop(FALSE);
-		CParticlesObject::Destroy(p_overheat);
+		Particles::Details::Destroy(p_overheat);
 	}
 
 #ifdef HOLDERCUSTOM_NEW
 #ifdef STATIONARYMGUN_NEW
-	if (Owner())
+	if (Owner() && Owner()->cast_stalker())
 	{
-		if (Owner()->cast_stalker() && !Owner()->cast_stalker()->g_Alive())
-		{
-			Owner()->cast_stalker()->detach_Holder();
-		}
+		Owner()->cast_stalker()->detach_Holder();
 	}
 #endif
 #endif
@@ -685,21 +690,18 @@ void CWeaponStatMgun::UpdateBarrelDir()
 		ClampRotationHorz(m_tgt_y_rot, m_cur_y_rot, -m_lim_y_rot.y, -m_lim_y_rot.x);
 	}
 
-	if (OwnerActor())
+	switch (GetState())
 	{
-		switch (GetState())
-		{
-		case eStateIdle:
-		case eStateFire:
-			m_cur_x_rot = angle_inertion_var(m_cur_x_rot, m_tgt_x_rot, m_rotate_x_speed, m_rotate_x_speed, PI, Device.fTimeDelta);
-			m_cur_y_rot = angle_inertion_var(m_cur_y_rot, m_tgt_y_rot, m_rotate_y_speed, m_rotate_y_speed, PI, Device.fTimeDelta);
-			break;
-		case eStateReload:
-			m_cur_x_rot = m_bind_x_rot;
-			break;
-		default:
-			break;
-		}
+	case eStateIdle:
+	case eStateFire:
+		m_cur_x_rot = angle_inertion_var(m_cur_x_rot, m_tgt_x_rot, m_rotate_x_speed, m_rotate_x_speed, PI, Device.fTimeDelta);
+		m_cur_y_rot = angle_inertion_var(m_cur_y_rot, m_tgt_y_rot, m_rotate_y_speed, m_rotate_y_speed, PI, Device.fTimeDelta);
+		break;
+	case eStateReload:
+		m_cur_x_rot = m_bind_x_rot;
+		break;
+	default:
+		break;
 	}
 #else
 	XFi.transform_dir(dep, m_destEnemyDir);
@@ -747,10 +749,8 @@ void CWeaponStatMgun::cam_Update(float dt, float fov)
 		}
 		Fmatrix xfm = Visual()->dcast_PKinematics()->LL_GetTransform(bone_id);
 		XFORM().transform_tiny(P, xfm.c);
-		if (OwnerActor())
-			OwnerActor()->Orientation().yaw = -cam->yaw;
-		if (OwnerActor())
-			OwnerActor()->Orientation().pitch = -cam->pitch;
+		OwnerActor()->Orientation().yaw = -cam->yaw;
+		OwnerActor()->Orientation().pitch = -cam->pitch;
 	}
 	break;
 	case eCamChase:
@@ -801,9 +801,9 @@ void CWeaponStatMgun::cam_Update(float dt, float fov)
 #endif
 }
 
-void CWeaponStatMgun::renderable_Render()
+void CWeaponStatMgun::renderable_Render(IDSGraphManager* DM)
 {
-	inheritedPH::renderable_Render();
+	inheritedPH::renderable_Render(DM);
 
 	RenderLight();
 
@@ -940,7 +940,18 @@ bool CWeaponStatMgun::attach_Actor(CGameObject* actor)
 
 	if (OwnerActor())
 	{
-		OnCameraChange(eCamFirst);
+		switch (OwnerActor()->active_cam())
+		{
+		case eacFirstEye:
+			OnCameraChange(eCamFirst);
+			break;
+		case eacLookAt:
+			OnCameraChange(eCamChase);
+			break;
+		default:
+			OnCameraChange(eCamFirst);
+			break;
+		}
 		Camera()->yaw = m_cur_y_rot;
 		Camera()->pitch = m_cur_x_rot;
 	}
@@ -972,6 +983,7 @@ void CWeaponStatMgun::detach_Actor()
 	Action(eWpnActivate, 0);
 	SetFeelVisionIgnore(false);
 	m_anim_weapon.Play(SStmAnimWeapon::eStmAnimWeapon_idle);
+	m_anim_weapon.HandRemove();
 #else
 	Owner()->setVisible(1);
 	inheritedHolder::detach_Actor();
@@ -1095,18 +1107,6 @@ bool CWeaponStatMgun::Use(const Fvector &pos, const Fvector &dir, const Fvector 
 
 void CWeaponStatMgun::OnCameraChange(u16 type)
 {
-	if (OwnerActor())
-	{
-		if (type == eCamFirst)
-		{
-			Owner()->setVisible(FALSE);
-		}
-		else
-		{
-			Owner()->setVisible(TRUE);
-		}
-	}
-
 	if (active_camera == nullptr)
 	{
 		active_camera = camera[type];
@@ -1132,6 +1132,20 @@ void CWeaponStatMgun::OnCameraChange(u16 type)
 		}
 		active_camera = camera[type];
 	}
+
+	if (OwnerActor())
+	{
+		if (Camera()->tag == eCamFirst)
+		{
+			OwnerActor()->setVisible(FALSE);
+			m_anim_weapon.HandCreate();
+		}
+		else
+		{
+			OwnerActor()->setVisible(TRUE);
+			m_anim_weapon.HandRemove();
+		}
+	}
 }
 
 void CWeaponStatMgun::UpdateCamera()
@@ -1142,9 +1156,6 @@ void CWeaponStatMgun::UpdateCamera()
 	cam_Update(Device.fTimeDelta, g_fov);
 	OwnerActor()->Cameras().UpdateFromCamera(Camera());
 	OwnerActor()->Cameras().ApplyDevice(R_VIEWPORT_NEAR);
-
-	OwnerActor()->Orientation().yaw = 0;
-	OwnerActor()->Orientation().pitch = 0;
 
 	if (IsCameraZoom())
 	{
@@ -1177,7 +1188,7 @@ bool CWeaponStatMgun::IsCameraZoom()
 
 void CWeaponStatMgun::UpdateSound()
 {
-	if (IsActive())
+	if (IsActive() && (GetState() == eStateIdle || GetState() == eStateFire))
 	{
 		m_sound_mgr.RotatePlay(true);
 		bool play = false;
@@ -1197,8 +1208,7 @@ void CWeaponStatMgun::UpdateSound()
 void CWeaponStatMgun::SetFeelVisionIgnore(bool enable)
 {
 #ifdef SPATIAL_CHANGE
-	ISpatial *IS = smart_cast<ISpatial *>(this);
-	R_ASSERT(IS);
+    ISpatialShared& IS = SpatialComponent;
 	if (enable)
 		IS->spatial.type |= STYPE_FEELVISIONIGNORE;
 	else
@@ -1238,7 +1248,7 @@ void CWeaponStatMgun::UpdateAnimation()
 			}
 		}
 
-		if (anim_body && strlen(anim_legs))
+		if (anim_legs && strlen(anim_legs))
 		{
 			MotionID mid_legs = A->ID_Cycle(anim_legs);
 			if (mid_legs.idx != OwnerActor()->m_current_legs.idx)
@@ -1270,7 +1280,7 @@ void CWeaponStatMgun::UpdateAnimation()
 				stalker->CStepManager::on_animation_start(MotionID(), nullptr);
 			}
 		}
-		if (anim_body && strlen(anim_legs))
+		if (anim_legs && strlen(anim_legs))
 		{
 			MotionID mid_legs = A->ID_Cycle(anim_legs);
 			if (mid_legs.idx != stalker->animation().legs().animation().idx)
@@ -1282,12 +1292,14 @@ void CWeaponStatMgun::UpdateAnimation()
 			}
 		}
 		stalker->movement().set_desired_direction(0);
+#if 0
 		SBoneRotation &body = stalker->movement().m_body;
 		SBoneRotation &head = stalker->movement().m_head;
 		body.target.yaw = 0.0F;
 		body.target.pitch = 0.0F;
 		head.target.yaw = 0.0F;
 		head.target.pitch = 0.0F;
+#endif
 	}
 }
 

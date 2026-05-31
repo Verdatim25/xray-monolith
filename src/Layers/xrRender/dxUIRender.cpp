@@ -13,6 +13,11 @@ void dxUIRender::CreateUIGeom()
 
 void dxUIRender::DestroyUIGeom()
 {
+
+    for (auto& it : g_UIShadersCache)
+        it.second.destroy();
+    g_UIShadersCache.clear();
+
 	hGeom_TL = NULL;
 	hGeom_LIT = NULL;
 }
@@ -159,7 +164,6 @@ LPCSTR dxUIRender::UpdateShaderName(LPCSTR tex_name, LPCSTR sh_name)
 	string_path buff;
 	u32 v_dev = CAP_VERSION(HW.Caps.raster_major, HW.Caps.raster_minor);
 	u32 v_need = CAP_VERSION(2, 0);
-	//strstr(Core.Params,"-ps_movie") &&
 	if ((v_dev >= v_need) && FS.exist(buff, "$game_textures$", tex_name, ".ogm"))
 		return "hud\\movie";
 	else

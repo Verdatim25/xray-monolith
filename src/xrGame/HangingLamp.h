@@ -80,13 +80,11 @@ public:
 	virtual void net_Import(NET_Packet& P);
 	virtual BOOL UsedAI_Locations();
 
+	virtual CHangingLamp* cast_hanging_lamp() { return this; }
+
 	virtual void Center(Fvector& C) const;
 	virtual float Radius() const;
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CHangingLamp)
-#undef script_type_list
-#define script_type_list save_type_list(CHangingLamp)
 
 #endif //HangingLampH

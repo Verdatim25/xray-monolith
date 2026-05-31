@@ -8,10 +8,8 @@ class CFoodItem : public CEatableItemObject
 public:
 	CFoodItem();
 	virtual ~CFoodItem();
-	
+
+	virtual CFoodItem* cast_food_item() { return this; }
+
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CFoodItem)
-#undef script_type_list
-#define script_type_list save_type_list(CFoodItem)

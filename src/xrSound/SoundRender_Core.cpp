@@ -80,7 +80,7 @@ void CSoundRender_Core::_initialize(int stage)
 
 	bReady = TRUE;
 
-	if (strstr(Core.Params, "-prefetch_sounds"))
+	if (Core.ParamsData.test(ECoreParams::prefetch_sounds))
 	{
 		i_create_all_sources();
 	}
@@ -114,6 +114,13 @@ void CSoundRender_Core::stop_emitters()
 {
 	for (u32 eit = 0; eit < s_emitters.size(); eit++)
 		s_emitters[eit]->stop(FALSE);
+}
+
+void CSoundRender_Core::restart_emitters()
+{
+	for (u32 eit = 0; eit < s_emitters.size(); eit++)
+		if (s_emitters[eit]->target)
+			i_start(s_emitters[eit]);
 }
 
 int CSoundRender_Core::pause_emitters(bool val)

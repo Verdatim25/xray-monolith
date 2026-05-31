@@ -32,22 +32,6 @@ function game_object_on_net_spawn(obj)
 end
 function game_object_on_net_destroy(obj)
 	gameobjects_registry[obj:id()] = nil
-
-	-- Fix dynamic_news_manager loot table
-	local instance = dynamic_news_manager and dynamic_news_manager.get_dynamic_news and dynamic_news_manager.get_dynamic_news()
-	if instance and instance.loot then
-		for i = #instance.loot, 1, -1 do
-			local item = instance.loot[i]
-			if type(item) == "userdata" and item:id() == obj:id() then
-				table.remove(instance.loot, i)
-			end
-		end
-	end
-
-	-- Fix self.response containing deleted object
-	if instance and instance.response and instance.response["who"] and type(instance.response["who"]) == "userdata" and instance.response["who"]:id() == obj:id() then
-		instance.response["who"] = nil
-	end
 end
 
 -- Game objects iterator
@@ -72,6 +56,28 @@ _G.game_objects_without_actor_iter = function()
 		return obj
 	end
 end
+
+-- Game objects binder callback.net_spawn_after
+-- Bind a function to run right after engine net_Spawn.
+--[[ Example:
+function CObjectBinder:net_spawn(se_abstract)
+	if not (object_binder.net_spawn(self,se_abstract)) then
+		return false
+	end
+	self.object:set_callback(callback.net_spawn_after,self.net_spawn_after,self)
+	return true
+end
+
+function CObjectBinder:net_destroy()
+	self.object:set_callback(callback.net_spawn_after,nil)
+	object_binder.net_destroy(self)
+end
+
+function CObjectBinder:net_spawn_after()
+	-- Run your codes here.
+	-- Resources created in engine net_Spawn are available for use.
+end
+--]]
 
 -- Pseudogiant callbacks
 AddScriptCallback("pseudogiant_on_start_stomp_animation")
@@ -264,6 +270,21 @@ _G.COnRightClickMap = function(property_ui, map_table)
 	pda.map_spot_property.id = map_table.object_id
 	pda.map_spot_property.level_name = map_table.level_name
 	SendScriptCallback("on_map_right_click", property_ui, map_table)
+end
+
+--[[
+
+On left click on PDA map spot callback
+Params are id, level_name, spot_type
+	id - alife object id of the spot, 65535 if none
+	level_name - name of the level the spot belongs to
+	spot_type - icon id from map_spots XML
+
+--]]
+
+AddScriptCallback("on_map_spot_selected")
+function pda.map_spot_selected(id, level_name, spot_type)
+	SendScriptCallback("on_map_spot_selected", id, level_name, spot_type)
 end
 
 -- On receive game news callback
@@ -469,35 +490,10 @@ _G.CAI_Stalker__PathBuildFailCallback = function(npc)
 	return flags.ret_value
 end
 
--- Improve NPCs pathfinding by reducing actual anomaly damage radius
--- Works only when npc:get_enable_anomalies_pathfinding() == true or ai_die_in_anomalies cvar is 1
-function is_outside_damage_radius(zone, obj)
-	local se_zone = alife_object(zone:id())
-	if not se_zone then
-		return false
-	end
-
-	local data = utils_stpk.get_anom_zone_data(se_zone)
-	if not (data and data.shapes[1] and data.shapes[1].radius) then
-		return false
-	end
-
-	local radius = data.shapes[1].radius
-	local damage_radius = math.max(radius - 1.1, 1)
-	local damage_radius_sqr = damage_radius * damage_radius
-	local dist_sqr = zone:position():distance_to_sqr(obj:position())
-	local res = dist_sqr > damage_radius_sqr
-	return res
-end
-
-function anomaly_on_before_activate(zone, obj, flags)
-	if obj:id() ~= AC_ID 
-	and (IsStalker(obj) or IsMonster(obj))
-	and obj:alive()
-	and is_outside_damage_radius(zone, obj)
-	then
-		flags.ret_value = false
-	end
+-- HUD items state switch
+AddScriptCallback("actor_on_item_state_switch")
+_G.CHudItem__OnStateSwitch = function(obj, new_state, old_state)
+	SendScriptCallback("actor_on_item_state_switch", obj, new_state, old_state)
 end
 
 -- NLTP_ASHES: Trigger actor_on_item_put_in_box callback when moving item to stash from slot
@@ -508,52 +504,165 @@ function ActorMenu_on_item_after_move(npc_id, obj, mode, bag_from)
     end
 end
 
--- Prefetch HUD visual when moving item to slot
-function actor_item_to_slot_prefetch(item)
-	local hudSec = SYS_GetParam(0, item:section(), "hud")
-	if hudSec then
-		local visual = SYS_GetParam(0, hudSec, "item_visual")
-		if visual then
-			game.prefetch_model(visual)
-		end
+-- Generic server object on register
+AddScriptCallback("server_object_on_register")
+_G.CSE_ALifeDynamicObject_on_register = function(id)
+	SendScriptCallback("server_object_on_register", alife_object(id))
+end
+
+-- Generic server object on unregister
+AddScriptCallback("server_object_on_unregister")
+_G.CSE_ALifeDynamicObject_on_unregister = function(id)
+	SendScriptCallback("server_object_on_unregister", alife_object(id))
+end
+
+_G.server_objects_registry = {}
+function server_object_on_register(obj)
+	server_objects_registry[obj.id] = obj
+end
+function server_object_on_unregister(obj)
+	server_objects_registry[obj.id] = nil
+end
+
+-- If this is called, Lua called an exported LuaBind method that will result in engine getting a fatal error, leading to semibroken Lua state, ie. "Busy Hands" 
+AddScriptCallback("on_luabind_fatal_error")
+local LuaFatalErrorUIInstance = nil
+local on_luabind_fatal_error_triggered = false
+local in_main_menu = false
+_G.COnLuaBindFatalError = function(offender)
+	-- Don't engage when actor is gone, it doesn't matter at this point
+	-- The engine would still log the error
+	if not db.actor then
+		return
 	end
-end
 
--- Prefetch current items
-function actor_on_first_update_prefetch()
-	db.actor:iterate_inventory(function(npc, item)
-		local ui_texture = SYS_GetParam(0, item:section(), "icons_texture", "ui\\ui_icon_equipment")
-		game.prefetch_texture(ui_texture)
-
-		if item_backpack.is_in_slot(item) then
-			local hudSec = SYS_GetParam(0, item:section(), "hud")
-			if hudSec then
-				local visual = SYS_GetParam(0, hudSec, "item_visual")
-				if visual then
-					game.prefetch_model(visual)
-				end
-			end
-		end
-	end, db.actor)
-end
-
--- Force update close enough traders
-function npc_on_update(npc)
-	if npc:position():distance_to_sqr(db.actor:position()) < 30^2 then
-		trade_manager.update(npc)
+	if in_main_menu then
+		return
 	end
+
+	if on_luabind_fatal_error_triggered then
+		return
+	end
+	on_luabind_fatal_error_triggered = true
+
+	SendScriptCallback("on_luabind_fatal_error", offender)
+	exec_console_cmd("save " .. (user_name() or "") .. " - tempsave")
+
+	LuaFatalErrorUIInstance = LuaFatalErrorUI(offender)
+	LuaFatalErrorUIInstance:Show()
 end
+
+class "LuaFatalErrorUI" (CUIScriptWnd)
+function LuaFatalErrorUI:__init(offender) super()
+	self:SetWndRect(Frect():set(0,0,1024,768))
+	self:SetAutoDelete(true)
+
+	self.message_box = CUIMessageBoxEx()
+	self.offender = offender:gsub("%d.*(%[Lua%] ).*[/\\]", "%1")
+	self:Register(self.message_box, "LuaFatalErrorUI_msg_box")
+
+	self:InitCallBacks()
+	self:InitControls()
+	self:AllowWorkInPause(true)
+	self:AllowMovement(true)
+	self:AllowCursor(true)
+
+	self.message_box:AllowWorkInPause(true)
+	self.message_box:AllowMovement(true)
+	self.message_box:AllowCursor(true)
+
+	device():pause(true)
+end
+
+function LuaFatalErrorUI:__finalize()
+end
+
+function LuaFatalErrorUI:InitCallBacks()
+	self:AddCallback("LuaFatalErrorUI_msg_box", ui_events.MESSAGE_BOX_COPY_CLICKED, self.OnMsgCopy, self)
+	self:AddCallback("LuaFatalErrorUI_msg_box", ui_events.MESSAGE_BOX_YES_CLICKED, self.OnMsgYes, self)
+	self:AddCallback("LuaFatalErrorUI_msg_box", ui_events.MESSAGE_BOX_NO_CLICKED, self.OnMsgNo, self)
+end
+
+function LuaFatalErrorUI:InitControls()
+	self.message_box:InitMessageBox("message_box_lua_fatal_error")
+
+	local msg_str = game.translate_string("st_lua_fatal_error")
+	msg_str = msg_str:gsub("(%[Lua%] ).*[/\\]", "%1")
+	local str = strformat(msg_str, self.offender)
+	self.message_box:SetText(str)
+end
+
+function LuaFatalErrorUI:Show()
+    self.message_box:ShowDialog(true)
+end
+
+function LuaFatalErrorUI:OnMsgCopy()
+	device():pause(false)
+	exec_console_cmd("disconnect")
+end
+
+function LuaFatalErrorUI:OnMsgYes()
+	device():pause(false)
+    exec_console_cmd("load " .. (user_name() or "") .. " - tempsave")
+end
+
+function LuaFatalErrorUI:OnMsgNo()
+	device():pause(false)
+end
+
+function main_menu_on_init()
+	in_main_menu = true
+end
+
+function main_menu_on_quit()
+	in_main_menu = false
+end
+
+-- Orleon
+AddScriptCallback("actor_on_item_sell")
+AddScriptCallback("actor_on_item_buy")
 
 function on_game_start()
+	RegisterScriptCallback("main_menu_on_init", main_menu_on_init)
+	RegisterScriptCallback("main_menu_on_quit", main_menu_on_quit)
 	RegisterScriptCallback("actor_on_first_update", actor_on_first_update)
-
-	-- Prefetch callbacks. Disabled for now, conflict with SSS
-	-- RegisterScriptCallback("actor_item_to_slot", actor_item_to_slot_prefetch)
-	-- RegisterScriptCallback("actor_on_first_update", actor_on_first_update_prefetch)
-	
-	RegisterScriptCallback("npc_on_update", npc_on_update)
 	RegisterScriptCallback("ActorMenu_on_item_after_move", ActorMenu_on_item_after_move)
-	RegisterScriptCallback("anomaly_on_before_activate", anomaly_on_before_activate)
 	RegisterScriptCallback("game_object_on_net_spawn", game_object_on_net_spawn)
 	RegisterScriptCallback("game_object_on_net_destroy", game_object_on_net_destroy)
+	RegisterScriptCallback("server_object_on_register", server_object_on_register)
+	RegisterScriptCallback("server_object_on_unregister", server_object_on_unregister)
+
+	-- Orleon, patch later for compatibility
+	ui_inventory_UIInventory_TMode_Sell = ui_inventory.UIInventory.TMode_Sell
+	ui_inventory.UIInventory.TMode_Sell = function(self)
+	    self.on_sell_callback_flag = true
+	    ui_inventory_UIInventory_TMode_Sell(self)
+	    self.on_sell_callback_flag = false
+	end
+
+	ui_inventory_UIInventory_TMode_Buy = ui_inventory.UIInventory.TMode_Buy
+	ui_inventory.UIInventory.TMode_Buy = function(self)
+	    self.on_buy_callback_flag = true
+	    ui_inventory_UIInventory_TMode_Buy(self)
+	    self.on_buy_callback_flag = false
+	end
+
+	ui_inventory_UIInventory_On_Item_Exchange = ui_inventory.UIInventory.On_Item_Exchange
+	ui_inventory.UIInventory.On_Item_Exchange = function(self, npc_from, npc_to, obj)
+	    if self.on_sell_callback_flag then
+	        local cc = self.CC["actor_trade"]
+	        if cc then
+	            local sell_cost = utils_item.get_item_cost(obj, cc.trade_profile)
+	            SendScriptCallback("actor_on_item_sell", obj, sell_cost, npc_to)
+	        end
+	    end
+	    if self.on_buy_callback_flag then
+	        local cc = self.CC["npc_trade"]
+	        if cc then
+	            local buy_cost = utils_item.get_item_cost(obj, cc.trade_profile)
+	            SendScriptCallback("actor_on_item_buy", obj, buy_cost, npc_from)
+	        end
+	    end
+	    ui_inventory_UIInventory_On_Item_Exchange(self, npc_from, npc_to, obj)
+	end
 end

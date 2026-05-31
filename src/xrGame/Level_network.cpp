@@ -30,6 +30,7 @@ extern bool g_b_ClearGameCaptions;
 
 void CLevel::remove_objects()
 {
+	PROF_EVENT("remove_objects");
 	if (!IsGameTypeSingle()) Msg("CLevel::remove_objects - Start");
 	BOOL b_stored = psDeviceFlags.test(rsDisableObjectsAsCrows);
 
@@ -56,6 +57,7 @@ void CLevel::remove_objects()
 			ClientReceive();
 			ProcessGameEvents();
 			Objects.Update(false);
+            Objects.ProcessDestroyQueue();
 #ifdef DEBUG
 			Msg						("Update objects list...");
 #endif // #ifdef DEBUG
@@ -162,6 +164,10 @@ void CLevel::net_Stop()
 		Server->Disconnect();
 		xr_delete(Server);
 	}
+
+    Msg("Device.LuaGC clear");
+    Device.LuaGC.clear();
+    Device.LuaGCDebug.clear();
 
 	if (!g_dedicated_server)
 		ai().script_engine().collect_all_garbage();
@@ -317,6 +323,7 @@ void CLevel::Send(NET_Packet& P, u32 dwFlags, u32 dwTimeout)
 
 void CLevel::net_Update()
 {
+	PROF_EVENT("net_Update");
 	if (game_configured)
 	{
 		// If we have enought bandwidth - replicate client data on to server
@@ -532,6 +539,7 @@ void CLevel::ClearAllObjects()
 	while (ParentFound)
 	{
 		ParentFound = false;
+        xrSRWLockGuard g(prefetch_lock);
 		for (u32 i = 0; i < CLObjNum; i++)
 		{
 			CObject* pObj = Level().Objects.o_get_by_iterator(i);
@@ -558,6 +566,7 @@ void CLevel::ClearAllObjects()
 
 	CLObjNum = Level().Objects.o_count();
 
+    xrSRWLockGuard g(prefetch_lock);
 	for (u32 i = 0; i < CLObjNum; i++)
 	{
 		CObject* pObj = Level().Objects.o_get_by_iterator(i);

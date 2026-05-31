@@ -197,14 +197,14 @@ namespace inventory
 			sections_type::const_iterator e = sections.end();
 			for (; i != e; ++i)
 			{
-				if (!pSettings->line_exist((*i)->Name, "upgrades") || !pSettings->r_string((*i)->Name, "upgrades"))
+				if (!pSettings->line_exist((*i).Name, "upgrades") || !pSettings->r_string((*i).Name, "upgrades"))
 					continue;
 
-				if (!pSettings->line_exist((*i)->Name, "upgrade_scheme") || !pSettings->r_string(
-					(*i)->Name, "upgrade_scheme"))
+				if (!pSettings->line_exist((*i).Name, "upgrade_scheme") || !pSettings->r_string(
+					(*i).Name, "upgrade_scheme"))
 					continue;
 
-				add_root((*i)->Name);
+				add_root((*i).Name);
 			}
 			//-Alundaio
 
@@ -366,6 +366,10 @@ void Manager::test_all_upgrades( CInventoryItem& item )
 		bool Manager::upgrade_install(CInventoryItem& item, shared_str const& upgrade_id, bool loading)
 		{
 			Upgrade* upgrade = upgrade_verify(item.m_section_id, upgrade_id);
+			if (upgrade == nullptr)
+			{
+				return false;
+			}
 			UpgradeStateResult res = upgrade->can_install(item, loading);
 
 			if (res == result_ok)

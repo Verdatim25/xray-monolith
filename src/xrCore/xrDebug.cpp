@@ -87,8 +87,11 @@ void xrDebug::backend(const char* reason, const char* expression, const char* ar
 	string1024 tmp;
 	xr_sprintf(tmp, "***STOP*** file '%s', line %d.\n***Reason***: %s\n %s", file, line, reason, expression);
 	Msg(tmp);
-	FlushLog();
+	xrLogger::FlushLog();
 	if (handler) handler();
+
+	if (IsDebuggerPresent())
+		DebugBreak();
 
 	// Call the dialog
 	dlgExpr = reason;
@@ -189,7 +192,7 @@ void __cdecl xrDebug::fatal(const char* file, int line, const char* function, co
 
 void xrDebug::do_exit(const std::string& message)
 {
-	FlushLog();
+	xrLogger::FlushLog();
 	MessageBox(NULL, message.c_str(), "Error", MB_OK | MB_ICONERROR | MB_SYSTEMMODAL);
 	TerminateProcess(GetCurrentProcess(), 1);
 }
@@ -312,6 +315,9 @@ LONG WINAPI UnhandledFilter(struct _EXCEPTION_POINTERS* pExceptionInfo)
 		szResult = "DBGHELP.DLL not found";
 	}
 
+	if (IsDebuggerPresent())
+		DebugBreak();
+
 	string1024 reason;
 	xr_sprintf(reason, "*** Internal Error ***\n%s", szResult);
 	bool ref = false;
@@ -351,6 +357,7 @@ _CRTIMP _PNH __cdecl _set_new_handler(_PNH);
 
 void xrDebug::_initialize(const bool& dedicated)
 {
+	PROF_EVENT("xrDebug::_initialize");
 	handler = 0;
 	_set_new_mode(1); // gen exception if can't allocate memory
 	_set_new_handler(_out_of_memory); // exception-handler for 'out of memory' condition

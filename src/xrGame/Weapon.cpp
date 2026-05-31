@@ -1,11 +1,10 @@
-﻿////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////
 //	Modified by Axel DominatoR
 //	Last updated: 13/08/2015
 ////////////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
 #include "Weapon.h"
-#include "ParticlesObject.h"
 #include "entity_alive.h"
 #include "inventory_item_impl.h"
 #include "inventory.h"
@@ -54,6 +53,8 @@ float sens_multiple = 1.0f;
 float hud_fov_aim_multiplier = 1.0f;
 
 extern int g_nearwall;
+
+BOOL g_use_non_linear_inertia = TRUE;
 
 float CWeapon::SDS_Radius(bool alt) {
 	// hack for GL to always return 0, fix later
@@ -215,10 +216,10 @@ void CWeapon::UpdateXForm()
 		boneL = boneR2;
 
 	V->CalculateBones_Invalidate();
-	V->CalculateBones(TRUE);
+	// V->CalculateBones(TRUE);
 
-	Fmatrix& mL = V->LL_GetTransform(u16(boneL));
-	Fmatrix& mR = V->LL_GetTransform(u16(boneR));
+	Fmatrix& mL = V->LL_GetTransform_safed(u16(boneL));
+	Fmatrix& mR = V->LL_GetTransform_safed(u16(boneR));
 	// Calculate
 	Fmatrix mRes;
 	Fvector R, D, N;
@@ -428,32 +429,31 @@ void CWeapon::SetUIScope(LPCSTR scope_texture)
 BOOL useSeparateUBGLKeybind = TRUE;
 void CWeapon::SwitchZoomType()
 {
-	if (!useSeparateUBGLKeybind) {
+	if (!useSeparateUBGLKeybind)
+    {
 		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
-			SetZoomType(1);
-			m_zoom_params.m_bUseDynamicZoom = m_zoom_params.m_bUseDynamicZoom_Alt || READ_IF_EXISTS(pSettings, r_bool, cNameSect(), "scope_dynamic_zoom_alt", false);
-		} else if (IsGrenadeLauncherAttached())
+            SetZoomTypeAndParams(1);
+		}
+        else if (IsGrenadeLauncherAttached())
 		{
-			SwitchState(eSwitch);
-			return;
-		} else if (m_zoomtype != 0)
+            ToggleGrenadeLauncher();
+            return;
+		}
+        else if (m_zoomtype != 0)
 		{
-			SetZoomType(0);
-			m_zoom_params.m_bUseDynamicZoom = m_zoom_params.m_bUseDynamicZoom_Primary || READ_IF_EXISTS(pSettings, r_bool, cNameSect(), "scope_dynamic_zoom", false);
+            SetZoomTypeAndParams(0);
 		}
 
 		UpdateUIScope();
-	} else {
-		if (isGrenadeLauncherActive) // The IsGrenadeLauncherAttached() check is handled by ToggleGrenadeLauncher
-		{
-			ToggleGrenadeLauncher();
-		}
-
+	}
+    else
+    {
 		if (m_zoomtype == 0 && (m_altAimPos || g_player_hud->m_adjust_mode || (m_modular_attachments && IsScopeAttached() && READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "use_alt_aim_hud", false))))
 		{
 			SetZoomTypeAndParams(1);
-		} else if (m_zoomtype == 1)
+		}
+        else if (m_zoomtype != 0)
 		{
 			SetZoomTypeAndParams(0);
 		}
@@ -1018,6 +1018,12 @@ BOOL CWeapon::net_Spawn(CSE_Abstract* DC)
 	SetState(E->wpn_state);
 	SetNextState(E->wpn_state);
 
+    if (!m_ammoTypes[m_ammoType].c_str())
+    {
+        Msg("![%s] ERROR: CWeapon::net_Spawn: m_ammoTypes[m_ammoType] is invalid, m_ammoTypes.size %d, m_ammoType %d", Name(), m_ammoTypes.size(), m_ammoType);
+        m_ammoType = 0;
+    }
+
 	m_DefaultCartridge.Load(m_ammoTypes[m_ammoType].c_str(), m_ammoType, m_APk);
 	if (iAmmoElapsed)
 	{
@@ -1197,6 +1203,7 @@ void CWeapon::OnEvent(NET_Packet& P, u16 type)
 
 void CWeapon::shedule_Update(u32 dT)
 {
+	PROF_EVENT("CWeapon::shedule_Update");
 	// Queue shrink
 	//	u32	dwTimeCL		= Level().timeServer()-NET_Latency;
 	//	while ((NET.size()>2) && (NET[1].dwTimeStamp<dwTimeCL)) NET.pop_front();
@@ -1237,12 +1244,14 @@ void CWeapon::OnH_A_Independent()
 	inherited::OnH_A_Independent();
 	Light_Destroy();
 	UpdateAddonsVisibility();
+	//Engine.Sheduler.Register(this);
 };
 
 void CWeapon::OnH_A_Chield()
 {
 	inherited::OnH_A_Chield();
 	UpdateAddonsVisibility();
+	//Engine.Sheduler.Unregister(this);
 };
 
 void CWeapon::OnActiveItem()
@@ -1256,7 +1265,7 @@ void CWeapon::OnActiveItem()
 	//-
 
 	inherited::OnActiveItem();
-	//åñëè ìû çàíðóæàåìñÿ è îðóæèå áûëî â ðóêàõ
+	//если мы заряжаемся и оружие было в руках
 	//.	SetState					(eIdle);
 	//.	SetNextState				(eIdle);
 }
@@ -1402,20 +1411,20 @@ bool CWeapon::need_renderable()
 	return svp_has_objective_lens || not_in_scope;
 }
 
-void CWeapon::renderable_Render()
+void CWeapon::renderable_Render(IDSGraphManager* DM)
 {
-	UpdateXForm();
+	//UpdateXForm();
 
-	//íàðèñîâàòü ïîäñâåòêó
-	RenderLight();
-
-	//åñëè ìû â ðåæèìå ñíàéïåðêè, òî ñàì HUD ðèñîâàòü íå íàäî
+	//если мы в режиме снайперки, то сам HUD рисовать не надо
 	if (IsZoomed() && !IsRotatingToZoom() && ZoomTexture())
 		RenderHud(FALSE);
 	else
 		RenderHud(TRUE);
 
-	inherited::renderable_Render();
+	inherited::renderable_Render(DM);
+
+	//нарисовать подсветку
+	RenderLight();
 }
 
 void CWeapon::signal_HideComplete()
@@ -1581,7 +1590,7 @@ bool CWeapon::Action(u16 cmd, u32 flags)
 			}
 			return true;
 		}
-	case kCUSTOM16:
+	case kCUSTOM21:
 		if (useSeparateUBGLKeybind && flags & CMD_START && !IsPending())
 		{
 			if (pActor && pActor->is_safemode())
@@ -1775,6 +1784,10 @@ float CWeapon::GetConditionMisfireProbability() const
 BOOL CWeapon::CheckForMisfire()
 {
 	if (OnClient()) return FALSE;
+
+	// Disable engine-side misfire for NPCs to control it strictly via scripts
+	if (!smart_cast<CActor*>(H_Parent()))
+		return FALSE;
 
 	float rnd = ::Random.randF(0.f, 1.f);
 	float mp = GetConditionMisfireProbability();
@@ -2134,8 +2147,9 @@ CUIWindow* CWeapon::ZoomTexture()
 	else
 	{
 		scope_2dtexactive = 0; //crookr
-		return NULL;
+		return nullptr;
 	}
+	//return nullptr; //UseScopeTexture() ? m_UIScope : nullptr;
 }
 
 void CWeapon::SwitchState(u32 S)
@@ -2688,12 +2702,26 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 		// Двигаемся в любом другом направлении - плавно убираем наклон
 		if (m_fLR_MovingFactor < 0.0f)
 		{
-			m_fLR_MovingFactor += fStepPerUpd;
+			if (g_use_non_linear_inertia)
+			{
+				m_fLR_MovingFactor += fStepPerUpd * (0.1f - 2.f * m_fLR_MovingFactor);
+			}
+			else
+			{
+				m_fLR_MovingFactor += fStepPerUpd;
+			}
 			clamp(m_fLR_MovingFactor, -1.0f, 0.0f);
 		}
 		else
 		{
-			m_fLR_MovingFactor -= fStepPerUpd;
+			if (g_use_non_linear_inertia)
+			{
+				m_fLR_MovingFactor -= fStepPerUpd * (0.1f + 2.f * m_fLR_MovingFactor);
+			}
+			else
+			{
+				m_fLR_MovingFactor -= fStepPerUpd;
+			}
 			clamp(m_fLR_MovingFactor, 0.0f, 1.0f);
 		}
 	}
@@ -2829,12 +2857,26 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 		float fRetSpeedMod = (fYMag == 0.0f ? 1.0f : 0.75f) * (fInertiaReturnSpeedMod * 0.075f);
 		if (m_fLR_InertiaFactor < 0.0f)
 		{
-			m_fLR_InertiaFactor += fAvgTimeDelta * fRetSpeedMod;
+			if (g_use_non_linear_inertia)
+			{
+				m_fLR_InertiaFactor += (0.3f - m_fLR_InertiaFactor) * fAvgTimeDelta * fRetSpeedMod;
+			}
+			else
+			{
+				m_fLR_InertiaFactor += fAvgTimeDelta * fRetSpeedMod;
+			}
 			clamp(m_fLR_InertiaFactor, -1.0f, 0.0f);
 		}
 		else
 		{
-			m_fLR_InertiaFactor -= fAvgTimeDelta * fRetSpeedMod;
+			if (g_use_non_linear_inertia)
+			{
+				m_fLR_InertiaFactor -= (0.3f + m_fLR_InertiaFactor) * fAvgTimeDelta * fRetSpeedMod;
+			}
+			else
+			{
+				m_fLR_InertiaFactor -= fAvgTimeDelta * fRetSpeedMod;
+			}
 			clamp(m_fLR_InertiaFactor, 0.0f, 1.0f);
 		}
 	}
@@ -2845,12 +2887,26 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 		float fRetSpeedMod = (fPMag == 0.0f ? 1.0f : 0.75f) * (fInertiaReturnSpeedMod * 0.075f);
 		if (m_fUD_InertiaFactor < 0.0f)
 		{
-			m_fUD_InertiaFactor += fAvgTimeDelta * fRetSpeedMod;
+			if (g_use_non_linear_inertia)
+			{
+				m_fUD_InertiaFactor += (0.3f - m_fUD_InertiaFactor) * fAvgTimeDelta * fRetSpeedMod;
+			}
+			else
+			{
+				m_fUD_InertiaFactor += fAvgTimeDelta * fRetSpeedMod;
+			}
 			clamp(m_fUD_InertiaFactor, -1.0f, 0.0f);
 		}
 		else
 		{
-			m_fUD_InertiaFactor -= fAvgTimeDelta * fRetSpeedMod;
+			if (g_use_non_linear_inertia)
+			{
+				m_fUD_InertiaFactor -= (0.3f + m_fUD_InertiaFactor) * fAvgTimeDelta * fRetSpeedMod;
+			}
+			else
+			{
+				m_fUD_InertiaFactor -= fAvgTimeDelta * fRetSpeedMod;
+			}
 			clamp(m_fUD_InertiaFactor, 0.0f, 1.0f);
 		}
 	}
@@ -2861,6 +2917,11 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 
 	Fvector curr_offs;
 	curr_offs = {fLR_lim * -1.f * m_fLR_InertiaFactor, fUD_lim * m_fUD_InertiaFactor, 0.0f};
+
+	// PrivatePirate: rotate inertia offset around Z axis to compensate roll
+	Fmatrix R;
+	R.rotateZ(-m_hud_offset[1].z);
+	R.transform_dir(curr_offs);
 
 	Fmatrix hud_rotation;
 	hud_rotation.identity();
@@ -2950,6 +3011,9 @@ void CWeapon::modify_holder_params(float& range, float& fov) const
 
 bool CWeapon::render_item_ui_query()
 {
+    if (!m_pInventory)
+        return false;
+
 	bool b_is_active_item = (m_pInventory->ActiveItem() == this);
 	bool res = b_is_active_item && IsZoomed() && ZoomHideCrosshair() && ZoomTexture() && !IsRotatingToZoom();
 	return res;

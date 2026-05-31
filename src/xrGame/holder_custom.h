@@ -8,20 +8,16 @@ class CInventory;
 class CGameObject;
 class CCameraBase;
 class CActor;
+class CScriptGameObject;
+class CWeaponStatMgun;
 
 class CHolderCustom
 {
 private:
 	CGameObject* m_owner;
 	CActor* m_ownerActor;
-#ifdef HOLDERCUSTOM_NEW
-public:
-	CGameObject *Owner() { return m_owner; }
-protected:
-#else
 protected:
 	CGameObject* Owner() { return m_owner; }
-#endif
 	CActor* OwnerActor() { return m_ownerActor; }
 	bool m_bEnterLocked;
 	bool m_bExitLocked;
@@ -39,7 +35,12 @@ public:
 	virtual void UpdateEx(float fov)
 	{
 	}; //called by owner
+
 	virtual CHolderCustom* cast_holder_custom() { return this; }
+	virtual CCar* cast_car() { return nullptr; }
+	virtual CGameObject* cast_game_object() { return nullptr; }
+	virtual CWeaponStatMgun* cast_weapon_stat_mgun() { return nullptr; }
+
 	bool Engaged() { return m_owner != NULL; }
 	virtual void OnMouseMove(int x, int y) = 0;
 	virtual void OnKeyboardPress(int dik) = 0;
@@ -76,9 +77,10 @@ public:
 	};
 
 	shared_str m_sUseAction;
+
+#ifdef HOLDERCUSTOM_NEW
+	CScriptGameObject *Owner_script();
+#endif
+
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CHolderCustom)
-#undef script_type_list
-#define script_type_list save_type_list(CHolderCustom)

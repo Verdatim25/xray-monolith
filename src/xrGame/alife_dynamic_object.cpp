@@ -16,6 +16,8 @@
 #include "game_level_cross_table.h"
 #include "game_graph.h"
 #include "xrServer.h"
+#include "level.h"
+#include "map_manager.h"
 
 void CSE_ALifeDynamicObject::on_spawn()
 {
@@ -35,14 +37,15 @@ void CSE_ALifeDynamicObject::on_register()
 
 	if (!alife().graph().level().object(object->ID, true))
 		clear_client_data();
+
+    ::luabind::functor<void> funct;
+    if (ai().script_engine().functor("_G.CSE_ALifeDynamicObject_on_register", funct))
+        funct((u16)ID);
 }
 
 void CSE_ALifeDynamicObject::on_before_register()
 {
 }
-
-#include "level.h"
-#include "map_manager.h"
 
 void CSE_ALifeDynamicObject::on_unregister()
 {

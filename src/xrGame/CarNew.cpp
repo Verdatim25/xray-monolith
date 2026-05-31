@@ -25,24 +25,6 @@ void CCar::SetUseAction(LPCSTR txt)
 	m_sUseAction._set(txt);
 }
 
-void CCar::LoadExplosiveSection(LPCSTR section, bool is_load_from_model_custom_data)
-{
-	if (is_load_from_model_custom_data)
-	{
-		CInifile *ini = Visual()->dcast_PKinematics()->LL_UserData();
-		CExplosive::Load(ini, section);
-	}
-	else
-	{
-		CExplosive::Load(pSettings, section);
-	}
-}
-
-void CCar::InitExplosiveSection()
-{
-	LoadExplosiveSection("explosion", true);
-}
-
 /*------------------------------------------------------------------------------------------------------------------------
     Fly
 ------------------------------------------------------------------------------------------------------------------------*/
@@ -103,6 +85,8 @@ BOOL CCar::Fly_net_Spawn(CSE_Abstract *DC)
 						}
 					}
 				}
+
+				I.E->set_DynamicLimits(default_l_limit, default_w_limit * 1000.F);
 			}
 		}
 		R_ASSERT3(m_rotor_bones.size(), "fly_definition no rotors", cNameSect_str());
@@ -136,13 +120,13 @@ BOOL CCar::Fly_net_Spawn(CSE_Abstract *DC)
 
 bool CCar::Fly_attach_Actor(CGameObject *actor)
 {
-	FlyResetControl();
+	ControlReset();
 	return true;
 }
 
 void CCar::Fly_detach_Actor()
 {
-	FlyResetControl();
+	ControlReset();
 }
 
 void CCar::Fly_VisualUpdate(float fov)
@@ -191,7 +175,7 @@ void CCar::Fly_PhDataUpdate(float step)
 			{
 				float force = mass * FlyWeightScale() * __min(velocity.magnitude(), m_control_neutral);
 				Fvector vec = Fvector().invert(velocity).normalize_safe().mul(force);
-				m_pPhysicsShell->applyRelForce(vec.x, vec.y, vec.z);
+				m_pPhysicsShell->applyForce(vec.x, vec.y, vec.z);
 			}
 		}
 
@@ -264,7 +248,7 @@ void CCar::Fly_RotorUpdate()
 			if (I.spinning != true)
 			{
 				I.spinning = true;
-				I.J->SetForceAndVelocity(m_rotor_force_max, m_rotor_speed_max * ((I.clockwise) ? 1 : -1), 1);
+                I.J->SetForceAndVelocity(m_rotor_force_max, (I.clockwise) ? m_rotor_speed_max : -m_rotor_speed_max, 1);
 			}
 		}
 	}
@@ -291,12 +275,124 @@ void CCar::SetFlyWeightAdd(float val)
 	m_fly_weight_add = (val > 0.0F) ? val : 0.0F;
 }
 
-void CCar::FlyResetControl()
+void CCar::ControlReset()
 {
+	ControlPressEleUp(false);
+	ControlPressEleDw(false);
+	ControlPressYawRs(false);
+	ControlPressYawLs(false);
+	ControlPressPitFs(false);
+	ControlPressPitBs(false);
+	ControlPressRolRs(false);
+	ControlPressRolLs(false);
 	m_control_ele = eControlEle_NA;
 	m_control_yaw = eControlYaw_NA;
 	m_control_pit = eControlPit_NA;
 	m_control_rol = eControlPit_NA;
+}
+
+void CCar::ControlPressEleUp(bool status)
+{
+	m_control_press_ele_up = status;
+	if (status)
+	{
+		m_control_ele = (m_control_press_ele_dw) ? eControlEle_NA : eControlEle_UP;
+	}
+	else
+	{
+		m_control_ele = (m_control_press_ele_dw) ? eControlEle_DW : eControlEle_NA;
+	}
+}
+
+void CCar::ControlPressEleDw(bool status)
+{
+	m_control_press_ele_dw = status;
+	if (status)
+	{
+		m_control_ele = (m_control_press_ele_up) ? eControlEle_NA : eControlEle_DW;
+	}
+	else
+	{
+		m_control_ele = (m_control_press_ele_up) ? eControlEle_UP : eControlEle_NA;
+	}
+}
+
+void CCar::ControlPressYawRs(bool status)
+{
+	m_control_press_yaw_rs = status;
+	if (status)
+	{
+		m_control_yaw = (m_control_press_yaw_ls) ? eControlYaw_NA : eControlYaw_RS;
+	}
+	else
+	{
+		m_control_yaw = (m_control_press_yaw_ls) ? eControlYaw_LS : eControlYaw_NA;
+	}
+}
+
+void CCar::ControlPressYawLs(bool status)
+{
+	m_control_press_yaw_ls = status;
+	if (status)
+	{
+		m_control_yaw = (m_control_press_yaw_rs) ? eControlYaw_NA : eControlYaw_LS;
+	}
+	else
+	{
+		m_control_yaw = (m_control_press_yaw_rs) ? eControlYaw_RS : eControlYaw_NA;
+	}
+}
+
+void CCar::ControlPressPitFs(bool status)
+{
+	m_control_press_pit_fs = status;
+	if (status)
+	{
+		m_control_pit = (m_control_press_pit_bs) ? eControlPit_NA : eControlPit_FS;
+	}
+	else
+	{
+		m_control_pit = (m_control_press_pit_bs) ? eControlPit_BS : eControlPit_NA;
+	}
+}
+
+void CCar::ControlPressPitBs(bool status)
+{
+	m_control_press_pit_bs = status;
+	if (status)
+	{
+		m_control_pit = (m_control_press_pit_fs) ? eControlPit_NA : eControlPit_BS;
+	}
+	else
+	{
+		m_control_pit = (m_control_press_pit_fs) ? eControlPit_FS : eControlPit_NA;
+	}
+}
+
+void CCar::ControlPressRolRs(bool status)
+{
+	m_control_press_rol_rs = status;
+	if (status)
+	{
+		m_control_rol = (m_control_press_rol_ls) ? eControlRol_NA : eControlRol_RS;
+	}
+	else
+	{
+		m_control_rol = (m_control_press_rol_ls) ? eControlRol_LS : eControlRol_NA;
+	}
+}
+
+void CCar::ControlPressRolLs(bool status)
+{
+	m_control_press_rol_ls = status;
+	if (status)
+	{
+		m_control_rol = (m_control_press_rol_rs) ? eControlRol_NA : eControlRol_LS;
+	}
+	else
+	{
+		m_control_rol = (m_control_press_rol_rs) ? eControlRol_RS : eControlRol_NA;
+	}
 }
 
 /*----------------------------------------------------------------------------------------------------
@@ -325,28 +421,28 @@ void CCar::Fly_OnKeyboardPress(int dik)
 	/* Movement. */
 	case kACCEL:
 	case kSPRINT_TOGGLE:
-		m_control_ele = (m_control_ele == eControlEle_DW) ? eControlEle_NA : eControlEle_UP;
+		ControlPressEleUp(true);
 		break;
 	case kCROUCH:
-		m_control_ele = (m_control_ele == eControlEle_UP) ? eControlEle_NA : eControlEle_DW;
-		break;
-	case kL_STRAFE:
-		m_control_rol = (m_control_rol == eControlRol_RS) ? eControlRol_NA : eControlRol_LS;
-		break;
-	case kR_STRAFE:
-		m_control_rol = (m_control_rol == eControlRol_LS) ? eControlRol_NA : eControlRol_RS;
-		break;
-	case kFWD:
-		m_control_pit = (m_control_pit == eControlPit_BS) ? eControlPit_NA : eControlPit_FS;
-		break;
-	case kBACK:
-		m_control_pit = (m_control_pit == eControlPit_FS) ? eControlPit_NA : eControlPit_BS;
+		ControlPressEleDw(true);
 		break;
 	case kL_LOOKOUT:
-		m_control_yaw = (m_control_yaw == eControlYaw_RS) ? eControlYaw_NA : eControlYaw_LS;
+		ControlPressYawLs(true);
 		break;
 	case kR_LOOKOUT:
-		m_control_yaw = (m_control_yaw == eControlYaw_LS) ? eControlYaw_NA : eControlYaw_RS;
+		ControlPressYawRs(true);
+		break;
+	case kFWD:
+		ControlPressPitFs(true);
+		break;
+	case kBACK:
+		ControlPressPitBs(true);
+		break;
+	case kL_STRAFE:
+		ControlPressRolLs(true);
+		break;
+	case kR_STRAFE:
+		ControlPressRolRs(true);
 		break;
 	/* Action. */
 	case kWPN_ZOOM:
@@ -369,28 +465,28 @@ void CCar::Fly_OnKeyboardRelease(int dik)
 	/* Movement. */
 	case kACCEL:
 	case kSPRINT_TOGGLE:
-		m_control_ele = (m_control_ele == eControlEle_UP) ? eControlEle_NA : eControlEle_DW;
+		ControlPressEleUp(false);
 		break;
 	case kCROUCH:
-		m_control_ele = (m_control_ele == eControlEle_DW) ? eControlEle_NA : eControlEle_UP;
-		break;
-	case kFWD:
-		m_control_pit = (m_control_pit == eControlPit_FS) ? eControlPit_NA : eControlPit_BS;
-		break;
-	case kBACK:
-		m_control_pit = (m_control_pit == eControlPit_BS) ? eControlPit_NA : eControlPit_FS;
-		break;
-	case kL_STRAFE:
-		m_control_rol = (m_control_rol == eControlRol_LS) ? eControlRol_NA : eControlRol_RS;
-		break;
-	case kR_STRAFE:
-		m_control_rol = (m_control_rol == eControlRol_RS) ? eControlRol_NA : eControlRol_LS;
+		ControlPressEleDw(false);
 		break;
 	case kL_LOOKOUT:
-		m_control_yaw = (m_control_yaw == eControlYaw_LS) ? eControlYaw_NA : eControlYaw_RS;
+		ControlPressYawLs(false);
 		break;
 	case kR_LOOKOUT:
-		m_control_yaw = (m_control_yaw == eControlYaw_RS) ? eControlYaw_NA : eControlYaw_LS;
+		ControlPressYawRs(false);
+		break;
+	case kFWD:
+		ControlPressPitFs(false);
+		break;
+	case kBACK:
+		ControlPressPitBs(false);
+		break;
+	case kL_STRAFE:
+		ControlPressRolLs(false);
+		break;
+	case kR_STRAFE:
+		ControlPressRolRs(false);
 		break;
 	/* Action. */
 	case kWPN_ZOOM:

@@ -1,5 +1,7 @@
 #pragma once
+#include "_thread_types.h"
 #include <fast_dynamic_cast/fast_dynamic_cast.hpp>
+#include "_thread_types.h"
 
 // resource itself, the base class for all derived resources
 class XRCORE_API xr_resource
@@ -8,11 +10,11 @@ public:
 	enum { RF_REGISTERED = 1 << 0 };
 
 public:
-	u32 dwReference;
+	xr_atomic_u32 dwReference;
 
-	xr_resource() : dwReference(0)
-	{
-	}
+	xr_resource() : dwReference(0) {}
+	xr_resource(const xr_resource&) : dwReference(0) {}
+	xr_resource& operator=(const xr_resource&) { return *this; }
 };
 
 class XRCORE_API xr_resource_flagged : public xr_resource
@@ -61,20 +63,19 @@ protected:
 	void _inc()
 	{
 		if (0 == p_) return;
-		p_->dwReference++;
+		p_->dwReference.fetch_add(1, std::memory_order_relaxed);
 	}
 
 	void _dec()
 	{
 		if (0 == p_) return;
-		p_->dwReference--;
-		if (0 == p_->dwReference) xr_delete(p_);
+		if (p_->dwReference.fetch_sub(1, std::memory_order_acq_rel) == 1) xr_delete(p_);
 	}
 
 public:
 	ICF void _set(T* rhs)
 	{
-		if (0 != rhs) rhs->dwReference++;
+		if (0 != rhs) rhs->dwReference.fetch_add(1, std::memory_order_relaxed);
 		_dec();
 		p_ = rhs;
 	}
@@ -129,6 +130,7 @@ public:
 	typedef T* (resptr_core::*unspecified_bool_type)() const;
 	operator unspecified_bool_type() const { return p_ == 0 ? 0 : &resptr_core::_get; }
 	bool operator!() const { return p_ == 0; }
+	operator bool() const { return p_ != 0; }
 
 	// fast swapping
 	void swap(self& rhs)
@@ -190,4 +192,4 @@ template <class T, class U, typename D>
 resptr_core<T, D> static_pointer_cast(resptr_core<U, D> const& p) { return static_cast<T*>(p.get()); }
 
 template <class T, class U, typename D>
-resptr_core<T, D> dynamic_pointer_cast(resptr_core<U, D> const& p) { return dynamic_cast<T*>(p.get()); }
+resptr_core<T, D> dynamic_pointer_cast(resptr_core<U, D> const& p) { return fast_dynamic_cast<T*>(p.get()); }

@@ -76,7 +76,7 @@ public:
 	virtual void OnH_B_Chield();
 	virtual void OnH_B_Independent(bool just_before_destroy);
 	virtual void UpdateCL();
-	virtual void renderable_Render();
+	virtual void renderable_Render(IDSGraphManager* DM);
 
 	virtual bool Useful() const;
 	virtual float Weight() const;
@@ -96,7 +96,3 @@ public:
 
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CWeaponAmmo)
-#undef script_type_list
-#define script_type_list save_type_list(CWeaponAmmo)

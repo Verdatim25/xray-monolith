@@ -260,7 +260,7 @@ public:
 		u16 bone_id;
 		Fmatrix transform;
 		//Fvector				velocity;
-		CParticlesObject* p_pgobject;
+		intrusive_ptr<CParticlesObject> p_pgobject;
 		CPhysicsElement* pelement;
 		CCar* pcar;
 		void Init();
@@ -610,7 +610,7 @@ public:
 	virtual void UpdateEx(float fov); //called by owner
 
 	virtual void shedule_Update(u32 dt);
-	virtual void renderable_Render();
+	virtual void renderable_Render(IDSGraphManager* DM);
 	virtual bool bfAssignMovement(CScriptEntityAction* tpEntityAction);
 	virtual bool bfAssignObject(CScriptEntityAction* tpEntityAction);
 
@@ -661,7 +661,7 @@ public:
 	};
 	virtual u16 Initiator();
 	// HUD
-	virtual void OnHUDDraw(CCustomHUD* hud);
+	virtual void OnHUDDraw(CCustomHUD* hud, IDSGraphManager* DM);
 
 	CCameraBase* Camera() { return active_camera; }
 	void SetExplodeTime(u32 et);
@@ -687,6 +687,14 @@ public:
 
 public:
 	virtual CEntity* cast_entity() { return this; }
+	virtual CGameObject* cast_game_object() { return this; }
+	virtual CExplosive* cast_explosive() { return this; }
+	virtual CPhysicsShellHolder* cast_physics_shell_holder() { return this; }
+	virtual CParticlesPlayer* cast_particles_player() { return this; }
+	virtual CScriptEntity* cast_script_entity() { return this; }
+	virtual IDamageSource* cast_IDamageSource() { return this; }
+	virtual CHolderCustom* cast_holder_custom() { return this; }
+	virtual CCar* cast_car() { return this; }
 private:
 	template <class T>
 	IC void fill_wheel_vector(LPCSTR S, xr_vector<T>& type_wheels);
@@ -698,13 +706,6 @@ private:
 
 	virtual void reinit();
 	virtual void reload(LPCSTR section);
-	virtual CGameObject* cast_game_object() { return this; }
-	virtual CExplosive* cast_explosive() { return this; }
-	virtual CPhysicsShellHolder* cast_physics_shell_holder() { return this; }
-	virtual CParticlesPlayer* cast_particles_player() { return this; }
-	virtual CScriptEntity* cast_script_entity() { return this; }
-	virtual IDamageSource* cast_IDamageSource() { return this; }
-	virtual CHolderCustom* cast_holder_custom() { return this; }
 
 private:
 	car_memory* m_memory;
@@ -743,6 +744,23 @@ private:
 	float m_rotor_force_max;
 	float m_rotor_speed_max;
 
+	bool m_control_press_ele_up; /* Up */
+	bool m_control_press_ele_dw; /* Down */
+	bool m_control_press_yaw_rs; /* Strafe right */
+	bool m_control_press_yaw_ls; /* Strafe left */
+	bool m_control_press_pit_fs; /* Move forward */
+	bool m_control_press_pit_bs; /* Move backward */
+	bool m_control_press_rol_rs; /* Rotate right */
+	bool m_control_press_rol_ls; /* Rotate left */
+	void ControlPressEleUp(bool status);
+	void ControlPressEleDw(bool status);
+	void ControlPressYawRs(bool status);
+	void ControlPressYawLs(bool status);
+	void ControlPressPitFs(bool status);
+	void ControlPressPitBs(bool status);
+	void ControlPressRolRs(bool status);
+	void ControlPressRolLs(bool status);
+
 	u16 m_control_ele; /* Elevating */
 	u16 m_control_pit; /* Pitch */
 	u16 m_control_rol; /* Roll */
@@ -779,9 +797,6 @@ public:
 	virtual bool is_ai_obstacle() const;
 	u16 GetType() { return m_type; }
 	void SetUseAction(LPCSTR txt);
-	virtual void SetInitiator(u16 id) { CExplosive::SetInitiator(id); }
-	void LoadExplosiveSection(LPCSTR section, bool is_load_from_model_custom_data = false);
-	void InitExplosiveSection();
 
 	enum eCarType
 	{
@@ -831,7 +846,7 @@ public:
 	void SetControlPitScale(float val) { m_control_pit_max = val; };
 	void SetControlRolScale(float val) { m_control_rol_max = val; };
 
-	void FlyResetControl();
+	void ControlReset();
 	bool IsCameraZoom();
 	bool IsRemoteControl() { return m_remote_control; };
 	float GetFlyWeightAdd() { return m_fly_weight_add; };
@@ -841,9 +856,3 @@ public:
 public:
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CCar)
-#undef script_type_list
-#define script_type_list save_type_list(CCar)
-
-//#endif // #if 0

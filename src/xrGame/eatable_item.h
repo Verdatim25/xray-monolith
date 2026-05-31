@@ -30,6 +30,7 @@ public:
 	virtual ~CEatableItem();
 	virtual DLL_Pure* _construct();
 	virtual CEatableItem* cast_eatable_item() { return this; }
+	virtual CInventoryItem* cast_inventory_item() { return this; }
 
 	virtual void Load(LPCSTR section);
 	virtual void load(IReader& packet);
@@ -51,7 +52,3 @@ public:
 
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CEatableItem)
-#undef script_type_list
-#define script_type_list save_type_list(CEatableItem)

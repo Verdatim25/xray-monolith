@@ -94,7 +94,7 @@ void Fvisual::Load(const char* N, IReader* data, u32 dwFlags)
 			ID = def().r_u32();
 			m_fast->iBase = def().r_u32();
 			m_fast->iCount = def().r_u32();
-			m_fast->dwPrimitives = iCount / 3;
+			m_fast->dwPrimitives = m_fast->iCount / 3;
 
 			VERIFY(NULL==m_fast->p_rm_Indices);
 			m_fast->p_rm_Indices = RImplementation.getIB(ID, true);
@@ -211,6 +211,7 @@ void Fvisual::Load(const char* N, IReader* data, u32 dwFlags)
 
 void Fvisual::Render(float)
 {
+	PROF_EVENT("Fvisual::Render");
 #if (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4)
 	if (m_fast && RImplementation.phase == CRender::PHASE_SMAP && !RCache.is_TessEnabled())
 	{

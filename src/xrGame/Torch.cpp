@@ -155,8 +155,11 @@ void CTorch::Switch(bool light_on)
 	{
 		light_render->set_active(light_on);
 
-		// CActor *pA = smart_cast<CActor *>(H_Parent());
-		//if(!pA)
+		if(light_on && H_Parent() && H_Parent()->cast_actor())
+		{
+			m_prev_hp.x = -H_Parent()->cast_actor()->cam_Active()->yaw;
+			m_prev_hp.y = -H_Parent()->cast_actor()->cam_Active()->pitch;
+		}
 		light_omni->set_active(light_on);
 	}
 	glow_render->set_active(light_on);
@@ -304,10 +307,10 @@ void CTorch::SwitchLightOnly()
 	}
 }
 
-void CTorch::UpdateCL()
+extern BOOL r_optimize_torch = TRUE;
+void CTorch::Update()
 {
-	inherited::UpdateCL();
-
+    PROF_EVENT("CTorch::Update")
 	if (!m_switched_on) return;
 
 	if (isFlickering)
@@ -323,20 +326,28 @@ void CTorch::UpdateCL()
 		}
 	}
 
-	CBoneInstance& BI = smart_cast<IKinematics*>(Visual())->LL_GetBoneInstance(guid_bone);
-	Fmatrix M;
+	Fmatrix M = PKinematics(Visual())->LL_GetTransform(guid_bone);
 
 	if (H_Parent())
 	{
-		CActor* actor = smart_cast<CActor*>(H_Parent());
-		if (actor) smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones_Invalidate();
+		if (!AlwaysTheCrow())
+			MakeMeCrow();
 
-		if (H_Parent()->XFORM().c.distance_to_sqr(Device.vCameraPosition) < _sqr(OPTIMIZATION_DISTANCE) || GameID() !=
-			eGameIDSingle)
+		CActor* actor = H_Parent()->cast_actor();
+		//if (actor)		PKinematics(H_Parent()->Visual())->CalculateBones_Invalidate();
+
+		if ((H_Parent()->XFORM().c.distance_to_sqr(Device.vCameraPosition) < _sqr(OPTIMIZATION_DISTANCE) || GameID() != eGameIDSingle))
 		{
 			// near camera
-			smart_cast<IKinematics*>(H_Parent()->Visual())->CalculateBones();
-			M.mul_43(XFORM(), BI.mTransform);
+			//PKinematics(H_Parent()->Visual())->CalculateBones
+			//(
+			//	!!Render->ViewBase.testSphere_dirty(H_Parent()->SpatialComponent->spatial.sphere.P,
+			//		H_Parent()->SpatialComponent->spatial.sphere.R + SpatialComponent->spatial.sphere.R + light_render->get_homdata().sphere.R)
+			//);
+			if(actor && actor->HUDview())
+				PKinematics(H_Parent()->Visual())->CalculateBones(TRUE);
+
+			M.mulA_43(XFORM());
 		}
 		else
 		{
@@ -348,6 +359,7 @@ void CTorch::UpdateCL()
 
 		if (actor)
 		{
+            float eps = 0.001f;
 			if (actor->active_cam() == eacLookAt)
 			{
 				m_prev_hp.x = angle_inertion_var(m_prev_hp.x, -actor->cam_Active()->yaw, m_torch_inertion_speed_min,
@@ -367,18 +379,18 @@ void CTorch::UpdateCL()
 			dir.setHP(m_prev_hp.x + m_delta_h, m_prev_hp.y);
 			Fvector::generate_orthonormal_basis_normalized(dir, up, right);
 
-			if (!m_bUseInertion && actor->active_cam() == eacFirstEye)
+			if (!m_bUseInertion && actor->HUDview())
 			{
 				CCameraBase* actorcam = actor->cam_FirstEye();
 				Fvector offset = actorcam->vPosition;
 				offset.mad(actorcam->Right(), m_torch_offset.x);
 				offset.mad(actorcam->Up(), m_torch_offset.y);
 				offset.mad(actorcam->Direction(), m_torch_offset.z);
-				light_render->set_position(offset);
-				light_omni->set_position(offset);
-				glow_render->set_position(actorcam->vPosition);
-				light_render->set_rotation(actorcam->Direction(), actorcam->Right());
-				light_omni->set_rotation(actorcam->Direction(), actorcam->Right());
+				light_render->set_position(offset, eps);
+				light_omni->set_position(offset, eps);
+				glow_render->set_position(actorcam->vPosition, eps);
+				light_render->set_rotation(actorcam->Direction(), actorcam->Right(), eps);
+				light_omni->set_rotation(actorcam->Direction(), actorcam->Right(), eps);
 				glow_render->set_direction(actorcam->Direction());
 			}
 			else
@@ -387,30 +399,33 @@ void CTorch::UpdateCL()
 				offset.mad(M.i, m_torch_offset.x);
 				offset.mad(M.j, m_torch_offset.y);
 				offset.mad(M.k, m_torch_offset.z);
-				light_render->set_position(offset);
-				glow_render->set_position(M.c);
-				light_render->set_rotation(dir, right);
-				light_omni->set_position(M.c);
-				light_omni->set_rotation(dir, right);
+				light_render->set_position(offset, eps);
+				glow_render->set_position(M.c, eps);
+                light_omni->set_position(M.c, eps);
+				light_render->set_rotation(dir, right, eps);
+				light_omni->set_rotation(dir, right, eps);
 				glow_render->set_direction(dir);
 			}
 		} // if(actor)
 		else
 		{
+            float dist = Device.GetPerceivedDist(M.c);
+            float eps = r_optimize_torch ? clampr<float>(dist * 0.002f, 0.01f, 0.12f) : 0.001f;
+            float d_eps = r_optimize_torch ? 0.01f : 0.001f;
 			if (can_use_dynamic_lights())
 			{
-				light_render->set_position(M.c);
-				light_render->set_rotation(M.k, M.i);
+				light_render->set_position(M.c, eps);
+				light_render->set_rotation(M.k, M.i, d_eps);
 
 				Fvector offset = M.c;
 				offset.mad(M.i, m_omni_offset.x);
 				offset.mad(M.j, m_omni_offset.y);
 				offset.mad(M.k, m_omni_offset.z);
-				light_omni->set_position(M.c);
-				light_omni->set_rotation(M.k, M.i);
-			} //if (can_use_dynamic_lights()) 
+				light_omni->set_position(M.c, eps);
+				light_omni->set_rotation(M.k, M.i, d_eps);
+			} 
 
-			glow_render->set_position(M.c);
+			glow_render->set_position(M.c, eps);
 			glow_render->set_direction(M.k);
 		}
 	} //if(HParent())
@@ -418,13 +433,13 @@ void CTorch::UpdateCL()
 	{
 		if (getVisible() && m_pPhysicsShell)
 		{
-			M.mul(XFORM(), BI.mTransform);
+			M.mulA_43(XFORM());
 
 			m_switched_on = false;
 			light_render->set_active(false);
 			light_omni->set_active(false);
 			glow_render->set_active(false);
-		} //if (getVisible() && m_pPhysicsShell)  
+		}
 	}
 
 	if (!m_switched_on) return;
@@ -445,6 +460,25 @@ void CTorch::UpdateCL()
 		light_omni->set_color(fclr);
 	}
 	glow_render->set_color(fclr);
+}
+
+void CTorch::shedule_Update(u32 dt)
+{
+	inherited::shedule_Update(dt);
+	//Update();
+
+	if (H_Parent() && m_switched_on && !AlwaysTheCrow() && enabled())
+	{
+		MakeMeCrow();
+	}
+}
+
+void CTorch::UpdateCL()
+{
+	PROF_EVENT("CTorch::UpdateCL")
+	inherited::UpdateCL			();
+	
+	Update();
 }
 
 void CTorch::SetLanim(LPCSTR name, bool bFlicker, int flickerChance, float flickerDelay, float framerate)
@@ -542,9 +576,9 @@ void CTorch::afterDetach()
 	Switch(false);
 }
 
-void CTorch::renderable_Render()
+void CTorch::renderable_Render(IDSGraphManager* DM)
 {
-	inherited::renderable_Render();
+	inherited::renderable_Render(DM);
 }
 
 void CTorch::enable(bool value)

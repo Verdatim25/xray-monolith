@@ -6,7 +6,8 @@
 
 dx10ConstantBuffer::~dx10ConstantBuffer()
 {
-	DEV->_DeleteConstantBuffer(this);
+	if (Device.m_pRender && DEV)
+		DEV->_DeleteConstantBuffer(this);
 	//	Flush();
 	_RELEASE(m_pBuffer);
 	xr_free(m_pBufferData);
@@ -84,7 +85,6 @@ void dx10ConstantBuffer::Flush()
 {
     if (m_bChanged)
     {
-/*
         void    *pData;
 #ifdef USE_DX11
         D3D11_MAPPED_SUBRESOURCE    pSubRes;
@@ -101,8 +101,6 @@ void dx10ConstantBuffer::Flush()
 #else
         m_pBuffer->Unmap();
 #endif
-*/
-        HW.pContext->UpdateSubresource(m_pBuffer, 0, NULL, (BYTE*)m_pBufferData, 0, 0);
         m_bChanged = false;
     }
 }

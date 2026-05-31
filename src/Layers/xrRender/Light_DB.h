@@ -14,6 +14,7 @@ public:
 	xr_vector<ref_light> sun_cascades;
 	ref_light rain_light;
 	light_Package package;
+	light* rain_light;
 public:
 	void add_light(light* L);
 

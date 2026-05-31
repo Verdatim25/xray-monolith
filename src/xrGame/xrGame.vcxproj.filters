@@ -2497,9 +2497,6 @@
     <Filter Include="UI\Common\ImGui">
       <UniqueIdentifier>{c14ffa0c-947d-49b9-8e01-269569b48371}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Core\Client\Objects\items &amp; weapons\Weapons\Various weapons\Weapon Grenade Launcher">
-      <UniqueIdentifier>{6750ea25-06ba-4a57-b46a-dd2be81676ad}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mt_config.h">
@@ -3285,13 +3282,7 @@
     <ClInclude Include="alife_registry_container.h">
       <Filter>AI\ALife\simulator_base\registry_container</Filter>
     </ClInclude>
-    <ClInclude Include="alife_registry_container_composition.h">
-      <Filter>AI\ALife\simulator_base\registry_container</Filter>
-    </ClInclude>
     <ClInclude Include="alife_registry_container_inline.h">
-      <Filter>AI\ALife\simulator_base\registry_container</Filter>
-    </ClInclude>
-    <ClInclude Include="alife_registry_container_space.h">
       <Filter>AI\ALife\simulator_base\registry_container</Filter>
     </ClInclude>
     <ClInclude Include="alife_registry_wrappers.h">
@@ -5172,18 +5163,6 @@
     <ClInclude Include="script_callback_ex.h">
       <Filter>AI\AScript\ScriptClasses\ScriptCallbackEx</Filter>
     </ClInclude>
-    <ClInclude Include="script_callback_ex_generators.h">
-      <Filter>AI\AScript\ScriptClasses\ScriptCallbackEx</Filter>
-    </ClInclude>
-    <ClInclude Include="script_callback_ex_inline.h">
-      <Filter>AI\AScript\ScriptClasses\ScriptCallbackEx</Filter>
-    </ClInclude>
-    <ClInclude Include="script_callback_ex_nonvoid.h">
-      <Filter>AI\AScript\ScriptClasses\ScriptCallbackEx</Filter>
-    </ClInclude>
-    <ClInclude Include="script_callback_ex_void.h">
-      <Filter>AI\AScript\ScriptClasses\ScriptCallbackEx</Filter>
-    </ClInclude>
     <ClInclude Include="script_lanim.h">
       <Filter>AI\AScript\ScriptClasses\ScriptLAnim</Filter>
     </ClInclude>
@@ -6357,9 +6336,6 @@
     <ClInclude Include="game_state_accumulator.h">
       <Filter>Core\Server\Games\client\mp\award_system\player_state</Filter>
     </ClInclude>
-    <ClInclude Include="game_state_accumulator_inline.h">
-      <Filter>Core\Server\Games\client\mp\award_system\player_state</Filter>
-    </ClInclude>
     <ClInclude Include="hits_store.h">
       <Filter>Core\Server\Games\client\mp\award_system\player_state</Filter>
     </ClInclude>
@@ -7392,15 +7368,14 @@
     <ClInclude Include="script_imgui_inline.h">
       <Filter>UI\Common\ImGui</Filter>
     </ClInclude>
-    <ClInclude Include="WeaponGrenadeLauncher.h">
-      <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Various weapons\Weapon Grenade Launcher</Filter>
     <ClInclude Include="..\3rd party\fast_dynamic_cast\fast_dynamic_cast.hpp">
       <Filter>Core\Common\SmartCast</Filter>
-    <ClInclude Include="WeaponGrenadeLauncher.h">
-      <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Various weapons\Weapon Grenade Launcher</Filter>
     </ClInclude>
     <ClInclude Include="..\3rd party\fastdelegate\fastdelegate.h">
       <Filter>Core</Filter>
+    </ClInclude>
+    <ClInclude Include="player_hud_legs.h">
+      <Filter>Core\Client\Objects\items &amp; weapons\HudItem</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -11103,8 +11078,13 @@
     <ClCompile Include="script_imgui_script.cpp">
       <Filter>UI\Common\ImGui</Filter>
     </ClCompile>
-    <ClCompile Include="WeaponGrenadeLauncher.cpp">
-      <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Various weapons\Weapon Grenade Launcher</Filter>
+    <ClCompile Include="map_manager_script.cpp">
+      <Filter>Core\Client\Objects\tasks_info_dialogs\map</Filter>
+    </ClCompile>
+    <ClCompile Include="searchlight_script.cpp" />
+    <ClCompile Include="searchlight_struct.cpp" />
+    <ClCompile Include="player_hud_legs.cpp">
+      <Filter>Core\Client\Objects\items &amp; weapons\HudItem</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -40,7 +40,7 @@ void show_restriction(const shared_str& restrictions)
 		Msg("     %s", _GetItem(*restrictions, i, temp));
 }
 
-typedef intrusive_ptr<CSpaceRestriction, RestrictionSpace::CTimeIntrusiveBase> CRestrictionPtr;
+typedef intrusive_ptr<CSpaceRestriction> CRestrictionPtr;
 
 void show_restriction(const CRestrictionPtr& restriction)
 {
@@ -108,7 +108,7 @@ IC void CSpaceRestrictionManager::collect_garbage()
 	SPACE_RESTRICTIONS::iterator E = m_space_restrictions.end();
 	for (; I != E;)
 	{
-		if (!(*I).second->m_ref_count && (Device.dwTimeGlobal >= (*I).second->m_last_time_dec + time_to_delete))
+		if (!(*I).second->intrusive_ref_count() && (Device.dwTimeGlobal >= (*I).second->m_last_time_dec + time_to_delete))
 		{
 			J = I;
 			++I;
@@ -145,6 +145,9 @@ void CSpaceRestrictionManager::restrict(ALife::_OBJECT_ID id, shared_str out_res
 
 void CSpaceRestrictionManager::unrestrict(ALife::_OBJECT_ID id)
 {
+    if (m_clients->empty())
+        return;
+
 	CLIENT_RESTRICTIONS::iterator I = m_clients->find(id);
 	VERIFY(I != m_clients->end());
 	m_clients->erase(I);
@@ -179,7 +182,7 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 	out_restrictors = normalize_string(out_restrictors);
 	in_restrictors = normalize_string(in_restrictors);
 
-	strconcat(sizeof(m_temp), m_temp, *out_restrictors, "\x01", *in_restrictors);
+	xr_strconcat(m_temp, *out_restrictors, "\x01", *in_restrictors);
 	shared_str space_restrictions = m_temp;
 
 	SPACE_RESTRICTIONS::const_iterator I = m_space_restrictions.find(space_restrictions);
@@ -187,7 +190,7 @@ CSpaceRestrictionManager::CRestrictionPtr CSpaceRestrictionManager::restriction(
 		return ((*I).second);
 
 	CSpaceRestriction* client_restriction = xr_new<CSpaceRestriction>(this, out_restrictors, in_restrictors);
-	m_space_restrictions.insert(std::make_pair(space_restrictions, client_restriction));
+	m_space_restrictions[space_restrictions] = client_restriction;
 	return (client_restriction);
 }
 

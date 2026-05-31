@@ -1,8 +1,7 @@
-﻿#include "pch_script.h"
+#include "pch_script.h"
 
 #include "WeaponMagazined.h"
 #include "actor.h"
-#include "ParticlesObject.h"
 #include "Scope.h"
 #include "Silencer.h"
 #include "GrenadeLauncher.h"
@@ -71,7 +70,7 @@ CWeaponMagazined::~CWeaponMagazined()
 	}
 
 	// sounds
-	Device.remove_from_seq_parallel(fastdelegate::FastDelegate0<>(this, &CWeaponMagazined::UpdateSoundsPositions));
+	Device.remove_from_seq_parallel(xr_make_delegate(this, &CWeaponMagazined::UpdateSoundsPositions));
 }
 
 void CWeaponMagazined::net_Destroy()
@@ -658,6 +657,7 @@ void CWeaponMagazined::on_b_hud_detach()
 extern ENGINE_API BOOL g_bootComplete;
 void CWeaponMagazined::UpdateCL()
 {
+	PROF_EVENT();
 	inherited::UpdateCL();
 	float dt = Device.fTimeDelta;
 
@@ -711,7 +711,7 @@ void CWeaponMagazined::UpdateSounds()
 	{
 		// Force update of fire dependencies and then put into second thread, fixes flickering limbs
 		get_LastFP();
-		Device.seqParallel.push_back(fastdelegate::FastDelegate0<>(this, &CWeaponMagazined::UpdateSoundsPositions));
+		Device.seqParallel.push_back(xr_make_delegate(this, &CWeaponMagazined::UpdateSoundsPositions));
 	}
 	else
 	{
@@ -960,12 +960,21 @@ void CWeaponMagazined::OnEmptyClick()
 		PlayBlendAnm(empty_click_layer, empty_click_speed, empty_click_power);
 }
 
+#include "../xrEngine/xr_input.h"
 void CWeaponMagazined::OnAnimationEnd(u32 state)
 {
 	switch (state)
 	{
-	case eReload: if (m_needReload) ReloadMagazine();
-		SwitchState(eIdle);
+	case eReload:
+        {
+            if (m_needReload)
+                ReloadMagazine();
+
+            // demonized: If wpn fire button is held, initiate auto firing when reload is done
+            if (Actor() && H_Parent() == Actor() && pInput->iGetAsyncKeyState(get_action_dik(kWPN_FIRE)))
+                m_pendingShot = true;
+            SwitchState(eIdle);
+        }
 		break; // End of reload animation
 	case eHiding: SwitchState(eHidden);
 		break; // End of Hide
@@ -1000,6 +1009,13 @@ void CWeaponMagazined::switch2_Idle()
 
 	SetPending(FALSE);
 	PlayAnimIdle();
+
+    if (m_pendingShot)
+    {
+        m_pendingShot = false;
+        if (Actor() && H_Parent() == Actor())
+            Level().IR_OnKeyboardPress(get_action_dik(kWPN_FIRE));
+    }
 }
 
 #ifdef DEBUG
@@ -1596,6 +1612,8 @@ void CWeaponMagazined::LoadScopeKoeffs()
 		&& (!m_modular_attachments || (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope)))
 	{
 		LPCSTR sect = GetScopeName().c_str();
+        if (!sect)
+            Debug.fatal(DEBUG_INFO, "!CWeaponMagazined::LoadScopeKoeffs ERROR: GetScopeName for `%s` returns null, check scope_name in ltx, m_scopes.size() %d, m_cur_scope %d", cNameSect_str(), m_scopes.size(), m_cur_scope);
 		m_scope_koef.cam_dispersion = READ_IF_EXISTS(pSettings, r_float, sect, "cam_dispersion_k", 1.0f);
 		m_scope_koef.cam_disper_inc = READ_IF_EXISTS(pSettings, r_float, sect, "cam_dispersion_inc_k", 1.0f);
 		m_scope_koef.pdm_base = READ_IF_EXISTS(pSettings, r_float, sect, "PDM_disp_base_k", 1.0f);
@@ -1737,12 +1755,14 @@ void CWeaponMagazined::OnMotionMark(u32 state, const motion_marks& M)
 {
 	inherited::OnMotionMark(state, M);
 
+    // Edited by Verdatim 18.4.2026
 	if (state == eReload)
 	{
 		if (bClearJamOnly)
 		{
 			bMisfire = false;
 			bClearJamOnly = false;
+            m_needReload = false; // Verdatim, fix for anm_reload_misfire with motion marks causing reloads
 			return;
 		}
 		
@@ -1764,6 +1784,21 @@ void CWeaponMagazined::OnMotionMark(u32 state, const motion_marks& M)
 		{
 			if (m_needReload)
 				ReloadMagazine();
+
+            // Verdatim, fix for lmg with non-(lmg_reload) motion marks causing belts to disappear
+
+            //Msg("reload motion mark detected! initiating reload.");
+
+            u8 ammo_type = m_ammoType;
+            int ae = CheckAmmoBeforeReload(ammo_type);
+
+            if (ammo_type == m_ammoType)
+            {
+                ae += iAmmoElapsed;
+            }
+            last_hide_bullet = ae >= bullet_cnt ? bullet_cnt : bullet_cnt - ae - 1;
+
+            HUD_VisualBulletUpdate();
 		}
 	}
 }

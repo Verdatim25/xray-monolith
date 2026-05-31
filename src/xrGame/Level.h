@@ -57,8 +57,11 @@ struct prefetch_event
 {  
     NET_Packet p;  
 	models_set models;
+    u16 id;
+    bool hasAlifeObject;
 };
 using prefetch_event_queue = xr_vector<prefetch_event>;
+using spawn_events_data_map = xr_unordered_flat_map<u16, prefetch_event>;
 
 class CLevel :
 	public IGame_Level,
@@ -107,7 +110,7 @@ public:
 	void ReculcInterpolationSteps();
 	u32 GetNumCrSteps() const { return m_dwNumSteps; }
 	void SetNumCrSteps(u32 NumSteps);
-	static void PhisStepsCallback(u32 Time0, u32 Time1);
+
 	bool In_NetCorrectionPrediction() { return m_bIn_CrPr; }
 	virtual void OnMessage(void* data, u32 size);
 	virtual void OnInvalidHost();
@@ -158,7 +161,8 @@ public:
 	void OnBuildVersionChallenge();
 	void OnConnectResult(NET_Packet* P);
 	// Static particles
-	DEFINE_VECTOR(CParticlesObject*, POVec, POIt);
+	using POVec = xr_vector<intrusive_ptr<CParticlesObject>>;
+	using POIt = POVec::iterator;
 	POVec m_StaticParticles;
 	game_cl_GameState* game = nullptr;
 	bool m_bGameConfigStarted = false;
@@ -215,6 +219,7 @@ public:
 	virtual void net_Stop();
 	virtual bool net_Start_client(const char* name);
 	virtual void net_Update();
+    virtual bool Load(u32 dwNum);
 	virtual bool Load_GameSpecific_Before();
 	virtual bool Load_GameSpecific_After();
 	virtual void Load_GameSpecific_CFORM(CDB::TRI* T, u32 count);
@@ -252,8 +257,10 @@ public:
 #ifdef SPAWN_ANTIFREEZE
 public:
 	NET_Queue_Event* spawn_events = nullptr;
+    spawn_events_data_map* spawn_events_data = nullptr;
 	prefetch_event_queue* prefetch_events = nullptr;
 	models_set* prefetched_models = nullptr;
+	xrSRWLock prefetch_lock;
     bool PostponedSpawn(u16 id);
 	void ProcessSpawnEvents();
 	static void ProcessPrefetchEvents(void* args);
@@ -302,6 +309,8 @@ public:
 	IC CAutosaveManager& autosave_manager();
     IC CDebugRenderer& debug_renderer();
 	void __stdcall script_gc(); // GC-cycle
+    static int LuaGC(); // GC that will called from Device via Device.LuaGC
+    static void LuaGCDebug(); // GC that will called from Device via Device.LuaGCDebug
 	IC CPHCommander& ph_commander();
 	IC CPHCommander& ph_commander_scripts();
 	IC CPHCommander& ph_commander_physics_worldstep();
@@ -309,6 +318,7 @@ public:
 	CLevel();
 	virtual ~CLevel();
 	// названияе текущего уровня
+	void set_name(const shared_str& level_name){ map_data.m_name = level_name;}
 	virtual shared_str name() const;
 	// this method can be used ONLY from CCC_ChangeGameType
 	// XXX nitrocaster: why c_str?
@@ -374,10 +384,6 @@ public:
 	void deinit_compression();
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CLevel)
-#undef script_type_list
-#define script_type_list save_type_list(CLevel)
 
 // XXX nitrocaster: should not cast to inherited
 IC CLevel& Level() { return *(CLevel*)g_pGameLevel; }

@@ -21,9 +21,14 @@ void CLight_DB::Load(IReader* fs)
 	// Lights itself
 	sun_original = NULL;
 	sun_adapted = NULL;
+<<<<<<< HEAD
 	rain_light = Create();
 	sun_cascades.clear();
 
+=======
+	rain_light = xr_new<light>();
+	rain_light->set_type(IRender_Light::DIRECT);
+>>>>>>> pip_test
 	{
 		F = fs->open_chunk(fsL_LIGHT_DYNAMIC);
 
@@ -151,7 +156,7 @@ void CLight_DB::LoadHemi()
 						L->set_active(true);
 						L->set_attenuation_params(Ldata.attenuation0, Ldata.attenuation1, Ldata.attenuation2,
 						                          Ldata.falloff);
-						L->spatial.type = STYPE_LIGHTSOURCEHEMI;
+						L->SpatialComponent->spatial.type = STYPE_LIGHTSOURCEHEMI;
 						//				R_ASSERT			(L->spatial.sector	);
 					}
 				}
@@ -174,7 +179,12 @@ void CLight_DB::Unload()
 		s.destroy();
 	sun_cascades.clear();
 	sun_adapted.destroy();
+<<<<<<< HEAD
 	rain_light.destroy();
+=======
+	rain_light->destroy(false);
+	rain_light = nullptr;
+>>>>>>> pip_test
 }
 
 light* CLight_DB::Create()
@@ -203,7 +213,9 @@ void CLight_DB::add_light(light* L)
 	L->frame_render = Device.dwFrame;
 	if (RImplementation.o.noshadows) L->flags.bShadow = FALSE;
 	if (L->flags.bStatic && !ps_r2_ls_flags.test(R2FLAG_R1LIGHTS)) return;
-	L->export_(package);
+	if(Device.vCameraPosition.distance_to_sqr(L->SpatialComponent->spatial.sphere.P)>_sqr(g_pGamePersistent->Environment().CurrentEnv->fog_distance)) return;
+
+	L->export_();
 }
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4)
 
@@ -253,6 +265,15 @@ void CLight_DB::Update()
 		sun_original->set_position(OP);
 		sun_original->set_color(E.sun_color.x, E.sun_color.y, E.sun_color.z);
 		sun_original->set_range(600.f);
+<<<<<<< HEAD
+=======
+		sun_adapted->set_rotation(AD, _sun_adapted->right);
+		sun_adapted->set_position(AP);
+		sun_adapted->set_color(E.sun_color.x * ps_r2_sun_lumscale * ps_r2_sun_lumscale_color.x,
+                               E.sun_color.y * ps_r2_sun_lumscale * ps_r2_sun_lumscale_color.y,
+		                       E.sun_color.z * ps_r2_sun_lumscale * ps_r2_sun_lumscale_color.z);
+		sun_adapted->set_range(600.f);
+>>>>>>> pip_test
 
 		for (auto s : sun_cascades) {
 			light* _sun_adapted = (light*)s._get();
@@ -270,7 +291,4 @@ void CLight_DB::Update()
 			}
 		}
 	}
-
-	// Clear selection
-	package.clear();
 }

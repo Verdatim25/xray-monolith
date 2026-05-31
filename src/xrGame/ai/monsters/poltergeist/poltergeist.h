@@ -83,7 +83,7 @@ public:
 	float get_fly_around_distance() const { return m_fly_around_distance; }
 	float get_fly_around_change_direction_time() const { return m_fly_around_change_direction_time; }
 
-	virtual void renderable_Render();
+	virtual void renderable_Render(IDSGraphManager* DM);
 
 	IC CPolterSpecialAbility* ability() { return (m_flame ? m_flame : m_tele); }
 
@@ -150,10 +150,6 @@ public:
 	friend class CPolterFlame;
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CPoltergeist)
-#undef script_type_list
-#define script_type_list save_type_list(CPoltergeist)
 
 
 //////////////////////////////////////////////////////////////////////////

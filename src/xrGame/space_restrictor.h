@@ -12,6 +12,8 @@
 #include "restriction_space.h"
 #include "script_export_space.h"
 
+class CScriptZone;
+
 class CSpaceRestrictor : public CGameObject
 {
 private:
@@ -60,8 +62,13 @@ public:
 	virtual BOOL UsedAI_Locations();
 	virtual void spatial_move();
 	IC bool actual() const;
+	virtual CCustomZone* cast_custom_zone() { return nullptr; }
 	virtual CSpaceRestrictor* cast_restrictor() { return this; }
+	virtual CGameObject* cast_game_object() { return this; }
+	virtual CScriptZone* cast_script_zone() { return nullptr; }
 	virtual bool register_schedule() const { return false; }
+
+	virtual void shedule_Update(u32 dt);
 
 	IC RestrictionSpace::ERestrictorTypes restrictor_type() const;
 
@@ -71,9 +78,5 @@ public:
 #endif
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CSpaceRestrictor)
-#undef script_type_list
-#define script_type_list save_type_list(CSpaceRestrictor)
 
 #include "space_restrictor_inline.h"

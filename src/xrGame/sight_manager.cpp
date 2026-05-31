@@ -212,6 +212,7 @@ void CSightManager::Exec_Look(float time_delta)
 			return;
 
 #ifdef HOLDERCUSTOM_NEW
+		/* Don't update m_object->XFORM() here. Holder will update. */
 		if (m_object->cast_stalker() && m_object->cast_stalker()->Holder())
 			return;
 #endif
@@ -301,6 +302,10 @@ Fvector CSightManager::object_position() const
 {
 	CGameObject const* object = &current_action().object();
 	Fvector look_pos;
+
+	if (const_cast<CGameObject*>(object)->cast_actor())
+		object->Visual()->dcast_PKinematics()->CalculateBBox(FALSE);
+
 	object->Center(look_pos);
 
 	const CEntityAlive* entity_alive = smart_cast<const CEntityAlive*>(object);

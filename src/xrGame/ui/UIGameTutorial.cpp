@@ -96,8 +96,10 @@ bool CUISequenceItem::Stop(bool bForce)
 CUISequencer::CUISequencer()
 {
 	m_flags.zero();
+	m_name = "invalid";
 }
 
+extern BOOL g_bootComplete;
 void CUISequencer::Start(LPCSTR tutor_name)
 {
 	VERIFY(m_sequencer_items.size()==0);
@@ -106,8 +108,22 @@ void CUISequencer::Start(LPCSTR tutor_name)
 
 	m_UIWindow = xr_new<CUIWindow>();
 
-	CUIXml uiXml;
-	uiXml.Load(CONFIG_PATH, UI_PATH, "game_tutorials.xml");
+	m_name = tutor_name;
+
+    static CUIXml uiXml;
+    static bool uiXmlLoaded;
+    if (uiXmlLoaded && g_bootComplete)
+    {
+        uiXml.SetLocalRoot(uiXml.GetRoot());
+    }
+    else
+    {
+        uiXmlLoaded = true;
+        uiXml.ClearInternal();
+        uiXml.Load(CONFIG_PATH, UI_PATH, "game_tutorials.xml");
+        uiXml.SetLocalRoot(uiXml.GetRoot());
+    }
+        
 
 	int items_count = uiXml.GetNodesNum(tutor_name, 0, "item");
 	VERIFY(items_count>0);
@@ -143,7 +159,7 @@ void CUISequencer::Start(LPCSTR tutor_name)
 	if (snd_name && snd_name[0])
 	{
 		m_global_sound.create(snd_name, st_Effect, sg_Undefined);
-		VERIFY(m_global_sound._handle() || strstr(Core.Params,"-nosound"));
+		VERIFY(m_global_sound._handle() || Core.ParamsData.test(ECoreParams::nosound));
 	}
 	m_start_lua_function = uiXml.Read("function_on_start", 0, "");
 	m_stop_lua_function = uiXml.Read("function_on_stop", 0, "");

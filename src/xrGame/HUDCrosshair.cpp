@@ -63,7 +63,7 @@ void CHUDCrosshair::SetDispersion(float d)
 	dispersionRadius = d;
 }
 
-extern ENGINE_API BOOL g_bRendering;
+extern ENGINE_API xr_atomic_bool g_bRendering;
 
 static float lerp(float a, float b, float t)
 {
@@ -79,12 +79,14 @@ void CHUDCrosshair::InitShaderWire()
 
 void CHUDCrosshair::DeinitShaderCrosshair()
 {
-	if (shaderCrosshair->inited())
-	{
-		shaderCrosshair->destroy();
-		strcpy(lastCrosshairShader, "");
-		strcpy(lastCrosshairTexture, "");
-	}
+    //if (shaderCrosshair->inited())
+    //{
+    //	shaderCrosshair->destroy();
+    //	strcpy(lastCrosshairShader, "");
+    //	strcpy(lastCrosshairTexture, "");
+    //}
+    strcpy(lastCrosshairShader, "");
+    strcpy(lastCrosshairTexture, "");
 }
 
 bool CHUDCrosshair::InitShaderCrosshair()

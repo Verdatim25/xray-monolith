@@ -25,6 +25,8 @@ public:
 	virtual void Draw();
 	virtual void Update();
 
+	virtual CUIWindow* ui_cast_window() { return this; }
+
 public:
 	CUIStatic* UIStaticDiskIO;
 	CUITextWnd* UIStaticQuickHelp;
@@ -154,7 +156,3 @@ public:
 	void SetPickUpItem(CInventoryItem* PickUpItem);
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CUIMainIngameWnd)
-#undef script_type_list
-#define script_type_list save_type_list(CUIMainIngameWnd)

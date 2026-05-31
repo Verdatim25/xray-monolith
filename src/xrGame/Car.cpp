@@ -1,9 +1,5 @@
 #include "stdafx.h"
 #include "car.h"
-//#if 0
-
-#include "ParticlesObject.h"
-//#include "Physics.h"
 
 #ifdef DEBUG
 #	include "../xrEngine/StatGraph.h"
@@ -112,6 +108,15 @@ CCar::CCar()
 	m_zoom_factor_aim = 1.0F;
 	m_zoom_status = false;
 
+	m_control_press_ele_up = false;
+	m_control_press_ele_dw = false;
+	m_control_press_yaw_rs = false;
+	m_control_press_yaw_ls = false;
+	m_control_press_pit_fs = false;
+	m_control_press_pit_bs = false;
+	m_control_press_rol_rs = false;
+	m_control_press_rol_ls = false;
+
 	m_control_ele = eControlEle_NA;
 	m_control_yaw = eControlYaw_NA;
 	m_control_pit = eControlPit_NA;
@@ -119,14 +124,14 @@ CCar::CCar()
 
 	m_control_neutral = 0.0F;
 	m_control_ele_max = 0.0F;
+	m_control_yaw_max = 0.0F;
 	m_control_pit_max = 0.0F;
 	m_control_rol_max = 0.0F;
-	m_control_yaw_max = 0.0F;
 
 	m_control_ele_inc = 0.0F;
+	m_control_yaw_inc = 0.0F;
 	m_control_pit_inc = 0.0F;
 	m_control_rol_inc = 0.0F;
-	m_control_yaw_inc = 0.0F;
 
 	m_body_bid = BI_NONE;
 	m_rotor_force_max = 0.0F;
@@ -200,8 +205,7 @@ void CCar::Load(LPCSTR section)
 {
 	inherited::Load(section);
 	//CPHSkeleton::Load(section);
-	ISpatial* self = smart_cast<ISpatial*>(this);
-	if (self) self->spatial.type |= STYPE_VISIBLEFORAI;
+	SpatialComponent->spatial.type |= STYPE_VISIBLEFORAI;
 
 #ifdef CAR_NEW
 	{
@@ -284,17 +288,7 @@ BOOL CCar::net_Spawn(CSE_Abstract* DC)
 		m_memory->reload(pUserData->r_string("visual_memory_definition", "section"));
 	}
 	
-	renderable.visual->flags.set(IRenderVisualFlags::eIgnoreOptimization, TRUE);
-
-	xr_vector<IRenderVisual*>* children = renderable.visual->get_children();
-
-	if (children)
-	{
-		for (auto* child : *children)
-		{
-			child->flags.set(IRenderVisualFlags::eIgnoreOptimization, TRUE);
-		}
-	}
+    renderable.visual->MarkIgnoreOptimization(TRUE);
 
 #ifdef CAR_NEW
 	CInifile *ini = Visual()->dcast_PKinematics()->LL_UserData();
@@ -305,17 +299,17 @@ BOOL CCar::net_Spawn(CSE_Abstract* DC)
 	m_zoom_factor_def = READ_IF_EXISTS(ini, r_float, cfg, "zoom_factor_def", 1.0F);
 	m_zoom_factor_aim = READ_IF_EXISTS(ini, r_float, cfg, "zoom_factor_aim", 1.0F);
 
-	if (ini->line_exist(cfg, "camera_first"))
+	if (ini->line_exist("camera", "cam_first"))
 	{
-		camera[ectFirst]->Load(ini->r_string(cfg, "camera_first"));
+		camera[ectFirst]->Load(ini->r_string("camera", "cam_first"));
 	}
-	if (ini->line_exist(cfg, "camera_chase"))
+	if (ini->line_exist("camera", "cam_chase"))
 	{
-		camera[ectChase]->Load(ini->r_string(cfg, "camera_chase"));
+		camera[ectChase]->Load(ini->r_string("camera", "cam_chase"));
 	}
-	if (ini->line_exist(cfg, "camera_free"))
+	if (ini->line_exist("camera", "cam_free"))
 	{
-		camera[ectFree]->Load(ini->r_string(cfg, "camera_free"));
+		camera[ectFree]->Load(ini->r_string("camera", "cam_free"));
 	}
 
 	m_remote_control = !!READ_IF_EXISTS(ini, r_bool, cfg, "remote_control", FALSE);
@@ -642,9 +636,9 @@ void CCar::VisualUpdate(float fov)
 	m_lights.Update();
 }
 
-void CCar::renderable_Render()
+void CCar::renderable_Render(IDSGraphManager* DM)
 {
-	inherited::renderable_Render();
+	inherited::renderable_Render(DM);
 	if (m_car_weapon)
 		m_car_weapon->Render_internal();
 }
@@ -665,7 +659,7 @@ void CCar::net_Import(NET_Packet& P)
 	//	P.w_u32 (NumItems);
 }
 
-void CCar::OnHUDDraw(CCustomHUD* /**hud*/)
+void CCar::OnHUDDraw(CCustomHUD* hud, IDSGraphManager* DM)
 {
 #ifdef DEBUG
 	Fvector velocity;
@@ -1989,7 +1983,7 @@ void CCar::PhDataUpdate(float step)
 		SDoor* D = m_doors_update[k];
 		if (!D->update)
 		{
-			m_doors_update.erase(m_doors_update.begin() + k);
+			m_doors_update.erase_fast(m_doors_update.begin() + k);
 			--k;
 		}
 		else
@@ -2140,13 +2134,14 @@ IC void CCar::fill_exhaust_vector(LPCSTR S, xr_vector<SExhaust>& exhausts)
 	IKinematics* pKinematics = smart_cast<IKinematics*>(Visual());
 	string64 S1;
 	int count = _GetItemCount(S);
+    exhausts.reserve(count);
 	for (int i = 0; i < count; ++i)
 	{
 		_GetItem(S, i, S1);
 
 		u16 bone_id = pKinematics->LL_BoneID(S1);
 
-		exhausts.push_back(SExhaust(this));
+		exhausts.emplace_back(this);
 		SExhaust& exhaust = exhausts.back();
 		exhaust.bone_id = bone_id;
 

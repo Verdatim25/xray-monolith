@@ -6,8 +6,8 @@ class CZoneCampfire : public CMosquitoBald
 private:
 	typedef CMosquitoBald inherited;
 protected:
-	CParticlesObject* m_pEnablingParticles;
-	CParticlesObject* m_pDisabledParticles;
+	intrusive_ptr<CParticlesObject> m_pEnablingParticles;
+	intrusive_ptr<CParticlesObject> m_pDisabledParticles;
 	ref_sound m_disabled_sound;
 	bool m_turned_on;
 	u32 m_turn_time;
@@ -30,7 +30,3 @@ public:
 	virtual void shedule_Update(u32 dt);
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CZoneCampfire)
-#undef script_type_list
-#define script_type_list save_type_list(CZoneCampfire)

@@ -54,12 +54,10 @@ public:
 	void ReloadBonesProtection();
 	void AddBonesProtection(LPCSTR bones_section);
 
+	virtual CHelmet* cast_helmet() { return this; }
+
 protected:
 	virtual bool install_upgrade_impl(LPCSTR section, bool test);
 	
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CHelmet)
-#undef script_type_list
-#define script_type_list save_type_list(CHelmet)

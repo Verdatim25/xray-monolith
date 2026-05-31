@@ -200,7 +200,7 @@ void CHW::DestroyDevice()
 }
 
 extern void GetMonitorResolution(u32& horizontal, u32& vertical);
-	
+extern void GetMonitorPosition(int& x, int& y);
 void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
 {
 	fill_vid_mode_list(this);
@@ -216,12 +216,19 @@ void CHW::selectResolution(u32& dwWidth, u32& dwHeight, BOOL bWindowed)
 		if (psCurrentVidMode[0] == 0 || psCurrentVidMode[1] == 0)
 			GetMonitorResolution(psCurrentVidMode[0], psCurrentVidMode[1]);
 
-		if (bWindowed)
+		if (g_screenmode == 0)
+		{
+			RECT clientRect;
+			GetClientRect(Device.m_hWnd, &clientRect);
+			dwWidth = clientRect.right;
+			dwHeight = clientRect.bottom;
+		}
+		else if (g_screenmode == 1)
 		{
 			dwWidth = psCurrentVidMode[0];
 			dwHeight = psCurrentVidMode[1];
 		}
-		else //check
+		else
 		{
 #ifndef _EDITOR
 			string64 buff;
@@ -264,6 +271,17 @@ void CHW::CreateDevice(HWND m_hWnd, bool move_window)
 #endif
 
 	DevAdapter = D3DADAPTER_DEFAULT;
+	{
+		HMONITOR hWindowMonitor = MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
+		for (UINT Adapter = 0; Adapter < pD3D->GetAdapterCount(); Adapter++)
+		{
+			if (pD3D->GetAdapterMonitor(Adapter) == hWindowMonitor)
+			{
+				DevAdapter = Adapter;
+				break;
+			}
+		}
+	}
 	DevT = Caps.bForceGPU_REF ? D3DDEVTYPE_REF : D3DDEVTYPE_HAL;
 
 #ifndef	MASTER_GOLD
@@ -348,7 +366,7 @@ void CHW::CreateDevice(HWND m_hWnd, bool move_window)
 			"Please try to restart the game.\n"
 			"Can not find matching format for back buffer."
 		);
-		FlushLog();
+		xrLogger::FlushLog();
 		MessageBox(NULL, "Failed to initialize graphics hardware.\nPlease try to restart the game.", "Error!",
 		           MB_OK | MB_ICONERROR);
 		TerminateProcess(GetCurrentProcess(), 0);
@@ -419,7 +437,7 @@ void CHW::CreateDevice(HWND m_hWnd, bool move_window)
 		Msg("Failed to initialize graphics hardware.\n"
 		    "Please try to restart the game.\n"
 		    "CreateDevice returned 0x%08x(D3DERR_DEVICELOST)", R);
-		FlushLog();
+		xrLogger::FlushLog();
 		MessageBox(NULL, "Failed to initialize graphics hardware.\nPlease try to restart the game.", "Error!",
 		           MB_OK | MB_ICONERROR);
 		TerminateProcess(GetCurrentProcess(), 0);
@@ -545,7 +563,7 @@ u32 CHW::selectGPU()
 
 u32 CHW::selectRefresh(u32 dwWidth, u32 dwHeight, D3DFORMAT fmt)
 {
-	if (psDeviceFlags.is(rsRefresh60hz) || strstr(Core.Params, "-60hz"))
+	if (psDeviceFlags.is(rsRefresh60hz) || Core.ParamsData.test(ECoreParams::_60hz))
 	{
 		refresh_rate = 1.f / 60.f;
 		return D3DPRESENT_RATE_DEFAULT;
@@ -578,28 +596,29 @@ BOOL CHW::support(D3DFORMAT fmt, DWORD type, DWORD usage)
 
 void CHW::updateWindowProps(HWND m_hWnd)
 {
-	//	BOOL	bWindowed				= strstr(Core.Params,"-dedicated") ? TRUE : !psDeviceFlags.is	(rsFullscreen);
-	//#ifndef DEDICATED_SERVER
-	//	BOOL	bWindowed				= !psDeviceFlags.is	(rsFullscreen);
-	//#else
-	//	BOOL	bWindowed				= TRUE;
-	//#endif
-
 	BOOL bWindowed = TRUE;
 #ifndef _EDITOR
 	if (!g_dedicated_server)
 		bWindowed = (g_screenmode != 2);
 #endif
 
-	u32 dwWindowStyle = 0;
 	// Set window properties depending on what mode were in.
 	if (bWindowed)
 	{
 		if (m_move_window)
 		{
-			dwWindowStyle = WS_BORDER | WS_VISIBLE;
-			if (!strstr(Core.Params, "-no_dialog_header"))
-				dwWindowStyle |= WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX;
+			u32 dwWindowStyle = 0;
+			if (g_screenmode == 1)
+			{
+				dwWindowStyle |= WS_POPUP;
+			}
+			else
+			{
+				dwWindowStyle |= WS_BORDER | WS_OVERLAPPEDWINDOW;
+				if (!Core.ParamsData.test(ECoreParams::no_dialog_header))
+					dwWindowStyle |= WS_DLGFRAME | WS_SYSMENU | WS_MINIMIZEBOX;
+			}
+
 			SetWindowLong(m_hWnd, GWL_STYLE, dwWindowStyle);
 			// When moving from fullscreen to windowed mode, it is important to
 			// adjust the window size after recreating the device rather than
@@ -610,23 +629,29 @@ void CHW::updateWindowProps(HWND m_hWnd)
 			// changed to 1024x768, because windows cannot be larger than the
 			// desktop.
 
+			u32 monW, monH;
+			GetMonitorResolution(monW, monH);
+			int monX, monY;
+			GetMonitorPosition(monX, monY);
+
+			LONG res_width = g_screenmode == 0 ? psCurrentVidMode[0] : monW;
+			LONG res_height = g_screenmode == 0 ? psCurrentVidMode[1] : monH;
+
 			RECT m_rcWindowBounds;
 			RECT DesktopRect;
 
 			GetClientRect(GetDesktopWindow(), &DesktopRect);
 
 			SetRect(&m_rcWindowBounds,
-			        (DesktopRect.right - DevPP.BackBufferWidth) / 2,
-			        (DesktopRect.bottom - DevPP.BackBufferHeight) / 2,
-			        (DesktopRect.right + DevPP.BackBufferWidth) / 2,
-			        (DesktopRect.bottom + DevPP.BackBufferHeight) / 2);
-
-			AdjustWindowRect(&m_rcWindowBounds, dwWindowStyle, FALSE);
+				(LONG(monW) - res_width) / 2,
+				(LONG(monH) - res_height) / 2,
+				(monW + res_width) / 2,
+				(monH + res_height) / 2);
 
 			SetWindowPos(m_hWnd,
 			             HWND_NOTOPMOST,
-			             m_rcWindowBounds.left,
-			             m_rcWindowBounds.top,
+			             monX + m_rcWindowBounds.left,
+			             monY + m_rcWindowBounds.top,
 			             (m_rcWindowBounds.right - m_rcWindowBounds.left),
 			             (m_rcWindowBounds.bottom - m_rcWindowBounds.top),
 			             SWP_SHOWWINDOW | SWP_NOCOPYBITS | SWP_DRAWFRAME);
@@ -634,7 +659,7 @@ void CHW::updateWindowProps(HWND m_hWnd)
 	}
 	else
 	{
-		SetWindowLong(m_hWnd, GWL_STYLE, dwWindowStyle = (WS_POPUP | WS_VISIBLE));
+		SetWindowLong(m_hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
 		SetWindowLong(m_hWnd, GWL_EXSTYLE, WS_EX_TOPMOST);
 	}
 

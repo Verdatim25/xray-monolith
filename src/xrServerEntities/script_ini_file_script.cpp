@@ -27,6 +27,7 @@ CScriptIniFile* reload_system_ini()
 	pSettings->Destroy(const_cast<CInifile*>(pSettings));
 	string_path fname;
 	FS.update_path(fname, "$game_config$", "system.ltx");
+	CInifile::InvalidateCache(fname);
 	pSettings = xr_new<CInifile>(fname);
 	return ((CScriptIniFile*)pSettings);
 }
@@ -40,7 +41,7 @@ void section_for_each(CScriptIniFile* self, ::luabind::functor<bool> functor)
 	sections_type::const_iterator e = sections.end();
 	for (; i != e; ++i)
 	{
-		if (functor((LPCSTR)(*i)->Name.c_str()) == true)
+		if (functor((LPCSTR)(*i).Name.c_str()) == true)
 			return;
 	}
 }
@@ -121,6 +122,18 @@ int get_modded_exes_version() {
 	// Convert the parsed date to the desired integer format
 	int result = years * 10000 + months * 100 + days;
 	return result;
+}
+
+LPCSTR get_modded_exes_name() {
+	shared_str result = "Modded Exes MT-TEST";
+	return result.c_str();
+}
+
+// demonized: get modded exes version
+xr_string get_modded_exes_version_string() {
+	std::string s = std::to_string(get_modded_exes_version());
+	s.insert(4, 1, '.').insert(7, 1, '.');
+	return xr_string(s.c_str());
 }
 
 ::luabind::object get_string_table() {
@@ -208,6 +221,7 @@ void CScriptIniFile::script_register(lua_State* L)
 
 		// demonized: get modded exes version
 		def("get_modded_exes_version", &get_modded_exes_version),
+		def("get_modded_exes_name", &get_modded_exes_name),
 
 		// demonized: get translation strings table
 		def("get_string_table", &get_string_table)

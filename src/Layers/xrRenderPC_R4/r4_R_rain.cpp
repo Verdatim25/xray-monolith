@@ -3,7 +3,7 @@
 #include "../../xrEngine/irenderable.h"
 #include "../xrRender/FBasicVisual.h"
 
-#include "r4_R_sun_support.h"
+#include "../xrRender/R_sun_support.h"
 
 const float tweak_rain_COP_initial_offs = 1200.f;
 const float tweak_rain_ortho_xform_initial_offs = 1000.f; //. ?
@@ -50,9 +50,14 @@ void CRender::shadowmap_rain()
 		D3DXMATRIX m_LightViewProj;
 
 	//	Use light as placeholder for rain data.
+<<<<<<< HEAD
 	auto RainLight = static_cast<light*>(Lights.rain_light._get());
 	if (!RainLight)
 		return;
+=======
+	// нет необходимости создавать каждый кадр структуру размером почти в киллобайт на стеке.
+	light& RainLight = *Lights.rain_light;
+>>>>>>> pip_test
 
 	PIX_EVENT(RENDER_RAIN_SMAP);
 	//static const float	source_offset		= 40.f;
@@ -89,11 +94,7 @@ void CRender::shadowmap_rain()
 
 	// Compute volume(s) - something like a frustum for infinite directional light
 	// Also compute virtual light position and sector it is inside
-	CFrustum cull_frustum;
 	xr_vector<Fplane> cull_planes;
-	Fvector3 cull_COP;
-	CSector* cull_sector;
-	Fmatrix cull_xform;
 	{
 		FPU::m64r();
 		// Lets begin from base frustum
@@ -103,15 +104,14 @@ void CRender::shadowmap_rain()
 #else
 		typedef DumbConvexVolume<false> t_volume;
 #endif
-		t_volume hull;
+		static t_volume hull;
+		hull.polys.clear();
+		hull.edges.clear();
+		hull.points.clear();
 		{
-			hull.points.reserve(9);
-			for (int p = 0; p < 8; p++)
-			{
-				Fvector3 xf = wform(fullxform_inv, corners[p]);
-				hull.points.push_back(xf);
-			}
-			for (int plane = 0; plane < 6; plane++)
+			for(int p = 0; p < 8; p++)
+				hull.points.push_back(wform(fullxform_inv, corners[p]));
+			for(int plane = 0; plane < 6; plane++)
 			{
 				hull.polys.push_back(t_volume::_poly());
 				for (int pt = 0; pt < 4; pt++)
@@ -121,36 +121,30 @@ void CRender::shadowmap_rain()
 		//hull.compute_caster_model	(cull_planes,fuckingsun->direction);
 		hull.compute_caster_model(cull_planes, RainLight->direction);
 #ifdef	_DEBUG
+<<<<<<< HEAD
 		for (u32 it = 0; it < cull_planes.size(); it++)
 			RImplementation.Target->dbg_addplane(cull_planes[it], 0xffffffff);
+=======
+		for (u32 it=0; it<cull_planes.size(); it++)
+			Target->dbg_addplane(cull_planes[it], 0xffffffff);
+>>>>>>> pip_test
 #endif
 
-		// Search for default sector - assume "default" or "outdoor" sector is the largest one
-		//. hack: need to know real outdoor sector
-		CSector* largest_sector = 0;
-		float largest_sector_vol = 0;
-		for (u32 s = 0; s < Sectors.size(); s++)
-		{
-			CSector* S = (CSector*)Sectors[s];
-			dxRender_Visual* V = S->root();
-			float vol = V->vis.box.getvolume();
-			if (vol > largest_sector_vol)
-			{
-				largest_sector_vol = vol;
-				largest_sector = S;
-			}
-		}
-		cull_sector = largest_sector;
-
 		// COP - 100 km away
+<<<<<<< HEAD
 		cull_COP.mad(Device.vCameraPosition, RainLight->direction, -tweak_rain_COP_initial_offs);
 		cull_COP.x += fBoundingSphereRadius * Device.vCameraDirection.x;
 		cull_COP.z += fBoundingSphereRadius * Device.vCameraDirection.z;
+=======
+		rainwet_cull_COP.mad(Device.vCameraPosition, RainLight.direction, -tweak_rain_COP_initial_offs);
+		rainwet_cull_COP.x += fBoundingSphereRadius * Device.vCameraDirection.x;
+		rainwet_cull_COP.z += fBoundingSphereRadius * Device.vCameraDirection.z;
+>>>>>>> pip_test
 
 		// Create frustum for query
-		cull_frustum._clear();
+		rainwet_cull_frustum._clear();
 		for (u32 p = 0; p < cull_planes.size(); p++)
-			cull_frustum._add(cull_planes[p]);
+			rainwet_cull_frustum._add(cull_planes[p]);
 
 
 		// Create approximate ortho-xform
@@ -197,16 +191,20 @@ void CRender::shadowmap_rain()
 
 		//D3DXMatrixOrthoOffCenterLH	((D3DXMATRIX*)&mdir_Project,bb.min.x,bb.max.x,  bb.min.y,bb.max.y,  bb.min.z-tweak_rain_ortho_xform_initial_offs,bb.max.z);
 		D3DXMatrixOrthoOffCenterLH((D3DXMATRIX*)&mdir_Project, bb.min.x, bb.max.x, bb.min.y, bb.max.y,
+<<<<<<< HEAD
 			bb.min.z - tweak_rain_ortho_xform_initial_offs,
 			bb.min.z + 2 * tweak_rain_ortho_xform_initial_offs);
+=======
+		                           bb.min.z - tweak_rain_ortho_xform_initial_offs,
+		                           bb.min.z + 2 * tweak_rain_ortho_xform_initial_offs);
+		rainwet_cull_xform.mul(mdir_Project, mdir_View);
+>>>>>>> pip_test
 
-		cull_xform.mul(mdir_Project, mdir_View);
-
-		s32 limit = _min(RImplementation.o.smapsize, ps_r3_dyn_wet_surf_sm_res);
+		s32		limit = _min(o.smapsize, ps_r3_dyn_wet_surf_sm_res);
 
 		// build viewport xform
 		float view_dim = float(limit);
-		float fTexelOffs = (.5f / RImplementation.o.smapsize);
+		float fTexelOffs = (.5f / o.smapsize);
 		Fmatrix m_viewport = {
 			view_dim / 2.f, 0.0f, 0.0f, 0.0f,
 			0.0f, -view_dim / 2.f, 0.0f, 0.0f,
@@ -218,8 +216,8 @@ void CRender::shadowmap_rain()
 
 		// snap view-position to pixel
 		//	snap zero point to pixel
-		Fvector cam_proj = wform(cull_xform, Fvector().set(0, 0, 0));
-		Fvector cam_pixel = wform(m_viewport, cam_proj);
+		Fvector cam_proj = wform(rainwet_cull_xform, Fvector().set(0, 0, 0));
+		Fvector	cam_pixel = wform(m_viewport, cam_proj);
 		cam_pixel.x = floorf(cam_pixel.x);
 		cam_pixel.y = floorf(cam_pixel.y);
 		Fvector cam_snapped = wform(m_viewport_inv, cam_pixel);
@@ -227,7 +225,7 @@ void CRender::shadowmap_rain()
 		diff.sub(cam_snapped, cam_proj);
 		Fmatrix adjust;
 		adjust.translate(diff);
-		cull_xform.mulA_44(adjust);
+		rainwet_cull_xform.mulA_44(adjust);
 
 		RainLight->X.D.minX = 0;
 		RainLight->X.D.maxX = limit;
@@ -239,42 +237,42 @@ void CRender::shadowmap_rain()
 	}
 
 	// Begin SMAP-render
-	{
-		bool bSpecialFull = mapNormalPasses[1][0].size() || mapMatrixPasses[1][0].size() || mapSorted.size();
-		VERIFY(!bSpecialFull);
-		HOM.Disable();
-		phase = PHASE_SMAP;
-		r_pmask(true, false);
-	}
-
-	// Fill the database
-	//r_dsgraph_render_subspace				(cull_sector, &cull_frustum, cull_xform, cull_COP, TRUE);
-	r_dsgraph_render_subspace(cull_sector, &cull_frustum, cull_xform, cull_COP, FALSE);
+	phase = PHASE_SMAP;
+	GMRainWet.traverse(pOutdoorSector, rainwet_cull_frustum, rainwet_cull_COP, rainwet_cull_xform);
+	GMRainWet.r_dsgraph_capture_static();
 
 	// Finalize & Cleanup
+<<<<<<< HEAD
 	RainLight->X.D.combine = cull_xform; //*((Fmatrix*)&m_LightViewProj);
+=======
+	RainLight.X.D.combine = rainwet_cull_xform;
+>>>>>>> pip_test
 
 	// Render shadow-map
 	//. !!! We should clip based on shrinked frustum (again)
 	{
-		bool bNormal = mapNormalPasses[0][0].size() || mapMatrixPasses[0][0].size();
-		bool bSpecial = mapNormalPasses[1][0].size() || mapMatrixPasses[1][0].size() || mapSorted.size();
-		if (bNormal || bSpecial)
+		bool bDeffered_Shadows = GMRainWet.RGraph.mapStaticPasses[0][0].size() || GMRainWet.RGraph.mapDynamicPasses[0][0].size();
+		bool bForward_Shadows = GMRainWet.RGraph.mapStaticPasses[1][0].size() || GMRainWet.RGraph.mapDynamicPasses[1][0].size() || GMRainWet.RGraph.mapStaticSorted.Sorted.size() || GMRainWet.RGraph.mapDynamicSorted.Sorted.size();
+		if(bDeffered_Shadows || bForward_Shadows)
 		{
 			Target->phase_smap_direct(RainLight, Target->rt_smap_depth, SE_SUN_RAIN_SMAP);
 			RCache.set_xform_world(Fidentity);
 			RCache.set_xform_view(Fidentity);
+<<<<<<< HEAD
 			RCache.set_xform_project(RainLight->X.D.combine);
 			r_dsgraph_render_graph(0);
 			//if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))	
 			//	Details->Render					()	;
+=======
+			RCache.set_xform_project(RainLight.X.D.combine);
+			GMRainWet.r_dsgraph_render_graph(0);
+>>>>>>> pip_test
 		}
 	}
 
 	// End SMAP-render
 	{
 		//		fuckingsun->svis.end					();
-		r_pmask(true, false);
 	}
 }
 

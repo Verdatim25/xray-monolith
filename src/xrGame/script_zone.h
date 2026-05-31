@@ -33,12 +33,11 @@ public:
 	bool active_contact(u16 id) const;
 	virtual bool IsVisibleForZones() { return false; }
 	virtual bool register_schedule() const { return true; }
+	virtual CSpaceRestrictor* cast_restrictor() { return this; }
+	virtual CScriptZone* cast_script_zone() { return this; }
+	virtual CGameObject* cast_game_object() { return this; }
 #ifdef DEBUG
 	virtual	void	OnRender			();
 #endif
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CScriptZone)
-#undef script_type_list
-#define script_type_list save_type_list(CScriptZone)

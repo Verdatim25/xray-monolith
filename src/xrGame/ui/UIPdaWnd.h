@@ -62,6 +62,8 @@ public:
 	CMapSpot* pSelectedMapSpot;
 
 	virtual void Reset();
+
+	virtual CUIWindow* ui_cast_window() { return this; }
 public:
 	CUIPdaWnd();
 	virtual ~CUIPdaWnd();
@@ -121,7 +123,3 @@ public:
 
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CUIPdaWnd)
-#undef script_type_list
-#define script_type_list save_type_list(CUIPdaWnd)

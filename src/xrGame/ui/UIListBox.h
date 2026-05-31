@@ -42,6 +42,9 @@ public:
 	void SetFont(CGameFont* pFont);
 	CGameFont* GetFont();
 
+	virtual CUIWindow* ui_cast_window() { return this; }
+	virtual CUIScrollView* ui_cast_scroll_view() { return this; }
+
 public:
 	bool bComplexMode;
 	bool bLineWrap;
@@ -55,7 +58,3 @@ protected:
 	bool m_bImmediateSelection;
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CUIListBox)
-#undef script_type_list
-#define script_type_list save_type_list(CUIListBox)

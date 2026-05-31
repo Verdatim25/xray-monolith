@@ -31,6 +31,9 @@
 #include "../xrCore/profiler.h"
 
 #include "xrSash.h"
+#include "MonitorList.h"
+
+extern "C" void XR_EARLY_INIT();
 
 //#include "securom_api.h"
 
@@ -73,6 +76,8 @@ float discord_update_rate = .5f;
 bool use_reshade = false;
 extern bool init_reshade();
 extern void unregister_reshade();
+extern void GetMonitorResolution(u32& horizontal, u32& vertical);
+extern void GetMonitorPosition(int& x, int& y);
 
 //ImGui
 #pragma comment(lib, "imgui.lib")
@@ -104,6 +109,7 @@ static char szEngineHash[33] = DEFAULT_MODULE_HASH;
 
 void compute_build_id()
 {
+	PROF_EVENT("compute_build_id");
 	build_date = __DATE__;
 
 	int days;
@@ -174,6 +180,9 @@ ENGINE_API string_path g_sLaunchWorkingFolder;
 // startup point
 void InitEngine()
 {
+	PROF_EVENT("InitEngine");
+	DevicePtr = &Device;
+
 	Engine.Initialize();
 	while (!g_bIntroFinished) Sleep(100);
 	Device.Initialize();
@@ -201,6 +210,7 @@ extern float g_fTimeFactor;
 
 PROTECT_API void InitSettings()
 {
+	PROF_EVENT("InitSettings");
 	string_path fname;
 	FS.update_path(fname, "$game_config$", "system.ltx");
 #ifdef DEBUG
@@ -251,7 +261,7 @@ PROTECT_API void InitConsole()
 	Console->Initialize();
 
 	xr_strcpy(Console->ConfigFile, "user.ltx");
-	if (strstr(Core.Params, "-ltx "))
+	if (Core.ParamsData.test(ECoreParams::ltx))
 	{
 		string64 c_name;
 		sscanf(strstr(Core.Params, "-ltx ") + 5, "%[^ ] ", c_name);
@@ -263,7 +273,8 @@ PROTECT_API void InitConsole()
 
 PROTECT_API void InitInput()
 {
-	BOOL bCaptureInput = FALSE; // !strstr(Core.Params, "-i");
+	PROF_EVENT("InitInput");
+	BOOL bCaptureInput = FALSE;
 
 	pInput = xr_new<CInput>(bCaptureInput);
 }
@@ -307,7 +318,12 @@ void destroyConsole()
 void destroyEngine()
 {
 	Device.Destroy();
+
+	// This should prevent empty log file in some cases
+	xrLogger::FlushLog();
+
 	Engine.Destroy();
+	DevicePtr = nullptr;
 }
 
 void execUserScript()
@@ -324,7 +340,6 @@ void slowdownthread(void*)
 	for (;;)
 	{
 		if (Device.Statistic->fFPS < 30) Sleep(1);
-		if (Device.mt_bMustExit) return;
 		if (0 == pSettings) return;
 		if (0 == Console) return;
 		if (0 == pInput) return;
@@ -335,11 +350,11 @@ void slowdownthread(void*)
 void CheckPrivilegySlowdown()
 {
 #ifdef DEBUG
-    if (strstr(Core.Params, "-slowdown"))
+    if (Core.ParamsData.test(ECoreParams::slowdown))
     {
         thread_spawn(slowdownthread, "slowdown", 0, 0);
     }
-    if (strstr(Core.Params, "-slowdown2x"))
+    if (Core.ParamsData.test(ECoreParams::slowdown2x))
     {
         thread_spawn(slowdownthread, "slowdown", 0, 0);
         thread_spawn(slowdownthread, "slowdown", 0, 0);
@@ -353,7 +368,7 @@ LPCSTR xr_ToUTF8(LPCSTR input, int max_length)
 	UConverter *conv_from = ucnv_open("cp1251", &errorCode);
 	R_ASSERT3(conv_from, "[Discord RPC] Error creating UConverter!\n", std::to_string(errorCode).c_str());
 
-	std::vector<UChar> converted(strlen(input) * 2);
+	xr_vector<UChar> converted(strlen(input) * 2);
 	int32_t conv_len = ucnv_toUChars(conv_from, &converted[0], converted.size(), input, strlen(input), &errorCode);
 	if (errorCode != U_ZERO_ERROR)
 	{
@@ -365,7 +380,7 @@ LPCSTR xr_ToUTF8(LPCSTR input, int max_length)
 	ucnv_close(conv_from);
 
 	// needs to be static so the data buffer is still valid after this function returns
-	static std::string g;
+	static xr_string g;
 	g.clear();
 
 	g.resize(converted.size() * 4);
@@ -579,22 +594,63 @@ void clearDiscordPresence()
 
 void Startup()
 {
+#ifndef DEDICATED_SERVER
+	fill_vid_monitor_list();
+#endif
+
 	InitSound1();
 	execUserScript();
 	InitSound2();
 
+#ifndef DEDICATED_SERVER
+	{
+		LPCSTR p = strstr(Core.Params, "-vid_monitor ");
+		if (p)
+		{
+			p += xr_strlen("-vid_monitor ");
+			while (*p == ' ') ++p;
+			if (*p != '\0')
+			{
+				bool quoted = (*p == '"');
+				if (quoted) ++p;
+				const char* end = quoted ? strchr(p, '"') : strchr(p, ' ');
+				if (!end) end = p + xr_strlen(p);
+
+				string256 name_buf;
+				u32 len = (u32)(end - p);
+				if (len > 0 && len < sizeof(name_buf))
+				{
+					strncpy_s(name_buf, sizeof(name_buf), p, len);
+					name_buf[len] = '\0';
+					vid_monitor_name = name_buf;
+					Msg("* vid_monitor: CLI override -> '%s'", name_buf);
+				}
+				else
+				{
+					Msg("! vid_monitor: CLI flag ignored (malformed value)");
+				}
+			}
+			else
+			{
+				Msg("! vid_monitor: CLI flag ignored (no value)");
+			}
+		}
+	}
+
+	ResetStartupMonitor();
+#endif
+
 	// ...command line for auto start
 	{
 		LPCSTR pStartup = strstr(Core.Params, "-start ");
-		if (pStartup) Console->Execute(pStartup + 1);
+		if (Core.ParamsData.test(ECoreParams::start)) Console->Execute(pStartup + 1);
 	}
 	{
 		LPCSTR pStartup = strstr(Core.Params, "-load ");
-		if (pStartup) Console->Execute(pStartup + 1);
+		if (Core.ParamsData.test(ECoreParams::load)) Console->Execute(pStartup + 1);
 	}
 
 	// Initialize APP
-	ShowWindow(Device.m_hWnd, SW_SHOWNORMAL);
 	Device.Create();
 
 	LALib.OnCreate();
@@ -602,6 +658,7 @@ void Startup()
 	g_pGamePersistent = (IGame_Persistent*)NEW_INSTANCE(CLSID_GAME_PERSISTANT);
 	g_SpatialSpace = xr_new<ISpatial_DB>();
 	g_SpatialSpacePhysic = xr_new<ISpatial_DB>();
+	g_SpatialSpaceLights = xr_new<ISpatial_DB>();
 
 	// Destroy LOGO
 	DestroyWindow(logoWindow);
@@ -619,7 +676,7 @@ void Startup()
 
 	// Main cycle
 	Msg("* [x-ray]: Starting Main Loop");
-	Memory.mem_usage();
+	//Memory.mem_usage();
 
 	Device.Run();
 
@@ -633,6 +690,7 @@ void Startup()
 	// Destroy APP
 	xr_delete(g_SpatialSpacePhysic);
 	xr_delete(g_SpatialSpace);
+	xr_delete(g_SpatialSpaceLights);
 	DEL_INSTANCE(g_pGamePersistent);
 
 	xr_delete(pApp);
@@ -655,6 +713,10 @@ void Startup()
 		Console->Destroy();
 
 	destroySound();
+
+#ifndef DEDICATED_SERVER
+	free_vid_monitor_list();
+#endif
 
 	destroyEngine();
 }
@@ -955,20 +1017,33 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 	// Check for another instance
 #ifdef NO_MULTI_INSTANCES
 #define STALKER_PRESENCE_MUTEX "Local\\STALKER-COP"
+	char exePath[MAX_PATH] = {};
+	DWORD bytes = GetModuleFileNameA(NULL, exePath, MAX_PATH);
+	exePath[MAX_PATH - 1] = '\0';
+	if (bytes == 0)
+		return 2;
 
-	HANDLE hCheckPresenceMutex = INVALID_HANDLE_VALUE;
-	hCheckPresenceMutex = OpenMutex(READ_CONTROL, FALSE, STALKER_PRESENCE_MUTEX);
-	if (hCheckPresenceMutex == NULL)
+	// Strip filename and focus on installation directory
+	char* cut = strrchr(exePath, '\\');
+	if (cut)
+		*cut = '\0';
+
+	// Normalize
+	xr_strlwr(exePath);
+
+	// Create hash
+	u32 pathHash = path_crc32(exePath, xr_strlen(exePath));
+
+	// Create unique mutex name  
+	string256 mutexName = {};
+	xr_sprintf(mutexName, sizeof(mutexName), STALKER_PRESENCE_MUTEX"_%08x", pathHash);
+
+	HANDLE hCheckPresenceMutex = CreateMutex(NULL, TRUE, mutexName);
+	if (!hCheckPresenceMutex)
+		return 2;
+
+	if (GetLastError() == ERROR_ALREADY_EXISTS)
 	{
-		// New mutex
-		hCheckPresenceMutex = CreateMutex(NULL, FALSE, STALKER_PRESENCE_MUTEX);
-		if (hCheckPresenceMutex == NULL)
-			// Shit happens
-			return 2;
-	}
-	else
-	{
-		// Already running
 		CloseHandle(hCheckPresenceMutex);
 		return 1;
 	}
@@ -983,6 +1058,15 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 	HWND logoPicture = GetDlgItem(logoWindow, IDC_STATIC_LOGO);
 	RECT logoRect;
 	GetWindowRect(logoPicture, &logoRect);
+	int splashW = logoRect.right - logoRect.left;
+	int splashH = logoRect.bottom - logoRect.top;
+
+	u32 screenW, screenH;
+	int monX, monY;
+	GetMonitorResolution(screenW, screenH);
+	GetMonitorPosition(monX, monY);
+	int x = monX + (screenW - splashW) / 2;
+	int y = monY + (screenH - splashH) / 2;
 
 	SetWindowPos(
 		logoWindow,
@@ -991,11 +1075,11 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 #else
         HWND_NOTOPMOST,
 #endif // NDEBUG
-		0,
-		0,
-		logoRect.right - logoRect.left,
-		logoRect.bottom - logoRect.top,
-		SWP_NOMOVE | SWP_SHOWWINDOW // | SWP_NOSIZE
+		x,
+		y,
+		splashW,
+		splashH,
+		SWP_SHOWWINDOW
 	);
 
 	UpdateWindow(logoWindow);
@@ -1082,9 +1166,15 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 		}
 
 		extern bool ignore_verify;
-		ignore_verify = !strstr(Core.Params, "-dbgdev");
+		ignore_verify = !Core.ParamsData.test(ECoreParams::dbgdev);
 
 		Msg("command line %s", Core.Params);
+		/*Msg("params: ");
+		for (const auto& v: Core.ParamsData.getBitsetAsMap())
+		{
+			Msg("%s: %s", v.first.c_str(), v.second ? "true" : "false");
+		}*/
+
 		LPCSTR sashName = "-openautomate ";
 		if (strstr(lpCmdLine, sashName))
 		{
@@ -1105,9 +1195,9 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 		};
 
 #ifndef DEDICATED_SERVER
-		if (strstr(Core.Params, "-r2a"))
+		if (Core.ParamsData.test(ECoreParams::r2a))
 			Console->Execute("renderer renderer_r2a");
-		else if (strstr(Core.Params, "-r2"))
+		else if (Core.ParamsData.test(ECoreParams::r2))
 			Console->Execute("renderer renderer_r2");
 		else
 		{
@@ -1120,7 +1210,7 @@ int APIENTRY WinMain_impl(HINSTANCE hInstance,
 #endif
 		//. InitInput ( );
 		Engine.External.Initialize();
-		Console->Execute("stat_memory");
+		Console->Execute("stat_memory_async");
 
 		Startup();
 		Core._destroy();
@@ -1181,6 +1271,39 @@ int APIENTRY WinMain(HINSTANCE hInstance,
                      char* lpCmdLine,
                      int nCmdShow)
 {
+  // Initialize LuaJIT low-memory pool FIRST, before any DLLs load and fragment
+	// the lower 2GB address space.
+	XR_EARLY_INIT();
+  
+	// Enable per-monitor DPI awareness so GetMonitorInfo returns real pixel sizes.
+	// Without this, monitors with different DPI scaling report wrong resolutions
+	// (e.g. a 1920x1080 secondary monitor reports 2400x1290 when primary is at 125%).
+	// Uses dynamic loading since _WIN32_WINNT is too old for these APIs.
+	// Try Win10 1703+ API first, fall back to Win 8.1+ API, silently skip on Win 7 or older.
+	{
+		bool dpi_set = false;
+		HMODULE user32 = GetModuleHandleA("user32.dll");
+		if (user32)
+		{
+			typedef BOOL(WINAPI* pfnSetProcessDpiAwarenessContext)(HANDLE);
+			auto fn = (pfnSetProcessDpiAwarenessContext)GetProcAddress(user32, "SetProcessDpiAwarenessContext");
+			if (fn)
+				dpi_set = fn(/*DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2*/ (HANDLE)-4) != FALSE;
+		}
+		if (!dpi_set)
+		{
+			HMODULE shcore = LoadLibraryA("Shcore.dll");
+			if (shcore)
+			{
+				typedef HRESULT(WINAPI* pfnSetProcessDpiAwareness)(int);
+				auto fn = (pfnSetProcessDpiAwareness)GetProcAddress(shcore, "SetProcessDpiAwareness");
+				if (fn)
+					fn(/*PROCESS_PER_MONITOR_DPI_AWARE*/ 2);
+				FreeLibrary(shcore);
+			}
+		}
+	}
+  
 	//DllMainOpenAL32(NULL, DLL_PROCESS_ATTACH, NULL);
 	DllMainXrCore(NULL, DLL_PROCESS_ATTACH, NULL);
 	DllMainXrPhysics(NULL, DLL_PROCESS_ATTACH, NULL);
@@ -1332,6 +1455,7 @@ void CApplication::OnEvent(EVENT E, u64 P1, u64 P2)
 	}
 	else if (E == eStart)
 	{
+		PROF_EVENT("CApplication::OnEvent: eStart");
 		LPSTR op_server = LPSTR(P1);
 		LPSTR op_client = LPSTR(P2);
 		Level_Current = u32(-1);
@@ -1512,7 +1636,7 @@ void CApplication::LoadStage()
 	VERIFY(ll_dwReference);
 	Msg("* phase time: %d ms", phase_timer.GetElapsed_ms());
 	phase_timer.Start();
-	Msg("* phase cmem: %lld K", Memory.mem_usage() / 1024);
+	//Msg("* phase cmem: %lld K", Memory.mem_usage() / 1024);
 
 	if (g_pGamePersistent->GameType() == 1 && !xr_strcmp(g_pGamePersistent->m_game_params.m_alife, "alife"))
 		max_load_stage = 17;
@@ -1533,8 +1657,6 @@ void CApplication::OnFrame()
 	Engine.Event.OnFrame();
 	g_SpatialSpace->update();
 	g_SpatialSpacePhysic->update();
-	if (g_pGameLevel)
-		g_pGameLevel->SoundEvent_Dispatch();
 }
 
 void CApplication::Level_Append(LPCSTR folder)
@@ -1818,7 +1940,7 @@ void doBenchmark(LPCSTR name)
 		Engine.External.Initialize();
 
 		xr_strcpy(Console->ConfigFile, "user.ltx");
-		if (strstr(Core.Params, "-ltx "))
+		if (Core.ParamsData.test(ECoreParams::ltx))
 		{
 			string64 c_name;
 			sscanf(strstr(Core.Params, "-ltx ") + 5, "%[^ ] ", c_name);

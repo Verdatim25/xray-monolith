@@ -333,7 +333,7 @@ IPureServer::EConnect IPureServer::Connect(LPCSTR options, GameDescriptionData& 
 #endif
 
 		BOOL bSimulator = FALSE;
-		if (strstr(Core.Params, "-netsim")) bSimulator = TRUE;
+		if (Core.ParamsData.test(ECoreParams::netsim)) bSimulator = TRUE;
 
 
 		// dump_URL		("! sv ",	net_Address_device);
@@ -994,7 +994,7 @@ void IPureServer::BannedList_Load()
 
 	for (; it != it_e; ++it)
 	{
-		const shared_str& sect_name = (*it)->Name;
+		const shared_str& sect_name = (*it).Name;
 		IBannedClient* Cl = xr_new<IBannedClient>();
 		Cl->Load(ini, sect_name);
 		BannedAddresses.push_back(Cl);

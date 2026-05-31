@@ -45,6 +45,9 @@ public:
 	virtual CPhysicsShellHolder* cast_physics_shell_holder() { return this; }
 	virtual CParticlesPlayer* cast_particles_player() { return this; }
 	virtual CScriptEntity* cast_script_entity() { return this; }
+	virtual CPhraseDialogManager* cast_phrase_dialog_manager() { return this; }
+	virtual CAI_PhraseDialogManager* cast_ai_phrase_dialog_manager() { return this; }
+	virtual CAI_Trader* cast_trader() { return this; }
 
 	virtual DLL_Pure* _construct();
 	virtual void Load(LPCSTR section);
@@ -148,7 +151,3 @@ public:
 	CTraderAnimation& animation() { return (*AnimMan); }
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CAI_Trader)
-#undef script_type_list
-#define script_type_list save_type_list(CAI_Trader)

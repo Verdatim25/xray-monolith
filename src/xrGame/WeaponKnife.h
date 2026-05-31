@@ -82,6 +82,8 @@ public:
 
 	virtual bool GetBriefInfo(II_BriefInfo& info);
 
+	virtual CWeaponKnife* cast_weapon_knife() { return this; }
+
 #ifdef DEBUG
 	virtual void		OnRender						();
 #endif
@@ -140,7 +142,7 @@ private:
 	u16 m_except_id;
 	CObject* m_last_picked_obj;
 
-	typedef xr_vector<ISpatial*> spartial_base_t;
+	typedef xr_vector<ISpatialShared> spartial_base_t;
 	typedef buffer_vector<CEntityAlive*> victims_list_t;
 
 	struct victim_bone_data
@@ -214,7 +216,3 @@ private:
 	                     shot_targets_t& dest_shots);
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CWeaponKnife)
-#undef script_type_list
-#define script_type_list save_type_list(CWeaponKnife)

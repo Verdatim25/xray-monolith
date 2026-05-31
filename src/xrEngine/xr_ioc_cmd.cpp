@@ -14,6 +14,7 @@
 #include "../Include/xrRender/RenderDeviceRender.h"
 
 #include "xr_object.h"
+#include "MonitorList.h"
 
 xr_token* vid_quality_token = NULL;
 
@@ -32,6 +33,10 @@ xr_token vid_bpp_token[] =
 	{"32", 32},
 	{0, 0}
 };
+
+extern float r_wallmarks_ssa_k;
+extern BOOL r_wallmarks_static;
+extern BOOL r_wallmarks_dynamic;
 //-----------------------------------------------------------------------
 
 void IConsole_Command::add_to_LRU(shared_str const& arg)
@@ -473,8 +478,11 @@ public:
 		int cnt = sscanf(args, "%dx%d", &_w, &_h);
 		if (cnt == 2)
 		{
+			const bool changed = (psCurrentVidMode[0] != _w) || (psCurrentVidMode[1] != _h);
 			psCurrentVidMode[0] = _w;
 			psCurrentVidMode[1] = _h;
+			if (changed && Device.b_is_Ready)
+				Device.Reset();
 		}
 		else
 		{
@@ -526,6 +534,7 @@ public:
 };
 
 extern void GetMonitorResolution(u32& horizontal, u32& vertical);
+extern void GetMonitorPosition(int& x, int& y);
 
 class CCC_Screenmode : public CCC_Token
 {
@@ -536,6 +545,9 @@ public:
 	{
 		u32 prev_mode = g_screenmode;
 		CCC_Token::Execute(args);
+
+		if (!Device.b_is_Ready)
+			return;
 
 		if ((prev_mode != g_screenmode))
 		{
@@ -562,27 +574,15 @@ public:
 			// but the fixes make no sense and contradicts MSDN, and this isn't a major priority since ResizeBuffers is called
 			// immediately after (before our Present call) so it works, just so stupid
 
-			bool windowed_to_fullscreen = ((prev_mode == 0) || (prev_mode == 1)) && (g_screenmode == 2);
-			bool fullscreen_to_windowed = (prev_mode == 2) && ((g_screenmode == 0) || (g_screenmode == 1));
-			bool reset_required		    = windowed_to_fullscreen || fullscreen_to_windowed;
-			if (Device.b_is_Ready && reset_required) {
+			if (Device.b_is_Ready) {
 				Device.Reset();
-			}
-
-			if (g_screenmode == 0 || g_screenmode == 1)
-			{
-				u32 w, h;
-				GetMonitorResolution(w, h);
-				SetWindowLongPtr(Device.m_hWnd, GWL_STYLE, WS_VISIBLE | WS_POPUP);
-				SetWindowPos(Device.m_hWnd, HWND_TOP, 0, 0, w, h, SWP_FRAMECHANGED);
-
-				if (g_screenmode == 0)
-					SetWindowLongPtr(Device.m_hWnd, GWL_STYLE, WS_VISIBLE | WS_OVERLAPPEDWINDOW);
 			}
 		}
 
 		RECT winRect;
 		GetClientRect(Device.m_hWnd, &winRect);
+		Device.clientWidth = winRect.right;
+		Device.clientHeight = winRect.bottom;
 		MapWindowPoints(Device.m_hWnd, nullptr, reinterpret_cast<LPPOINT>(&winRect), 2);
 		ClipCursor(&winRect);
 	}
@@ -760,7 +760,7 @@ public:
 	{
 		//fill_render_mode_list ();
 		tokens = vid_quality_token;
-		if (!strstr(Core.Params, "-r2"))
+		if (!Core.ParamsData.test(ECoreParams::r2))
 		{
 			inherited::Save(F);
 		}
@@ -776,9 +776,11 @@ public:
 class CCC_soundDevice : public CCC_Token
 {
 	typedef CCC_Token inherited;
+	u32 _dummy;
 public:
-	CCC_soundDevice(LPCSTR N) : inherited(N, &snd_device_id, NULL)
+	CCC_soundDevice(LPCSTR N) : inherited(N, &_dummy, NULL)
 	{
+		bLowerCaseArgs = FALSE;
 	};
 
 	virtual ~CCC_soundDevice()
@@ -789,14 +791,22 @@ public:
 	{
 		GetToken();
 		if (!tokens) return;
-		inherited::Execute(args);
+
+		bool device_changed = _stricmp(args, snd_device_name.c_str()) != 0;
+		if (!device_changed)
+			return;
+
+		// If sound system is fully initialized, use switch_device which validates and sets name
+		// Otherwise (during init phase), just set the name for _initialize(1) to use
+		if (Sound && Sound->is_ready())
+			Sound->switch_device(args);
+		else
+			snd_device_name = args;
 	}
 
 	virtual void Status(TStatus& S)
 	{
-		GetToken();
-		if (!tokens) return;
-		inherited::Status(S);
+		xr_strcpy(S, sizeof(S), snd_device_name.c_str());
 	}
 
 	virtual xr_token* GetToken()
@@ -807,12 +817,68 @@ public:
 
 	virtual void Save(IWriter* F)
 	{
-		GetToken();
-		if (!tokens) return;
-		inherited::Save(F);
+		F->w_printf("%s %s\r\n", cName, snd_device_name.c_str());
 	}
 };
 #endif
+
+
+#ifndef DEDICATED_SERVER
+class CCC_VidMonitor : public CCC_Token
+{
+	typedef CCC_Token inherited;
+	u32 _dummy;
+public:
+	CCC_VidMonitor(LPCSTR N) : inherited(N, &_dummy, NULL)
+	{
+		bLowerCaseArgs = FALSE;
+	}
+
+	virtual ~CCC_VidMonitor()
+	{
+	}
+
+	virtual void Execute(LPCSTR args) override
+	{
+		if (!Device.b_is_Ready)
+		{
+			vid_monitor_name = args;
+			ResetStartupMonitor();
+			return;
+		}
+
+		vid_monitor_name = args;
+
+		HMONITOR h = ResolveSelectedMonitor();
+		if (!h)
+		{
+			POINT p;
+			GetCursorPos(&p);
+			h = MonitorFromPoint(p, MONITOR_DEFAULTTOPRIMARY);
+		}
+
+		if (!Device.ChangeOutputMonitor(h))
+			Msg("! vid_monitor: live switch unavailable; restart to apply '%s'", args);
+	}
+
+	virtual void Status(TStatus& S)
+	{
+		xr_strcpy(S, sizeof(S), vid_monitor_name.c_str());
+	}
+
+	virtual xr_token* GetToken()
+	{
+		tokens = vid_monitor_token;
+		return inherited::GetToken();
+	}
+
+	virtual void Save(IWriter* F)
+	{
+		F->w_printf("%s %s\r\n", cName, vid_monitor_name.c_str());
+	}
+};
+#endif
+
 //-----------------------------------------------------------------------
 class CCC_ExclusiveMode : public IConsole_Command
 {
@@ -955,6 +1021,8 @@ void CCC_Register()
 	CMD1(CCC_SaveCFG, "cfg_save");
 	CMD1(CCC_LoadCFG, "cfg_load");
 
+	CMD3(CCC_Mask, "mt_particles", &psDeviceFlags, mtParticles);
+
 #ifdef DEBUG
     CMD1(CCC_MotionsStat, "stat_motions");
     CMD1(CCC_TexturesStat, "stat_textures");
@@ -966,7 +1034,6 @@ void CCC_Register()
 #endif // DEBUG_MEMORY_MANAGER
 
 #ifdef DEBUG
-    CMD3(CCC_Mask, "mt_particles", &psDeviceFlags, mtParticles);
 
     CMD1(CCC_DbgStrCheck, "dbg_str_check");
     CMD1(CCC_DbgStrDump, "dbg_str_dump");
@@ -991,6 +1058,8 @@ void CCC_Register()
     CMD3(CCC_Mask, "rs_render_dynamics", &psDeviceFlags, rsDrawDynamic);
 #endif
 
+	CMD3(CCC_Mask, "rs_render_portals", &psDeviceFlags, rsDrawPortals);
+
 	// bone damage modifier
 	CMD4(CCC_Float, "g_hit_pwr_modif", &hit_modifier, .5f, 3.f);
 
@@ -999,6 +1068,10 @@ void CCC_Register()
 
 	// Render device states
 	CMD4(CCC_Integer, "r__supersample", &ps_r__Supersample, 1, 4);
+
+    CMD4(CCC_Integer, "r_wallmarks_static", &r_wallmarks_static, 0, 1);
+    CMD4(CCC_Integer, "r_wallmarks_dynamic", &r_wallmarks_dynamic, 0, 1);
+    CMD4(CCC_Float, "r_wallmarks_ssa_k", &r_wallmarks_ssa_k, 0.25f, 10.f);
 
 	CMD4(CCC_Float, "r2_sunshafts_min", &ps_r2_sun_shafts_min, 0.0, 0.5);
 	CMD4(CCC_Float, "r2_sunshafts_value", &ps_r2_sun_shafts_value, 0.5, 2.0);
@@ -1028,6 +1101,9 @@ void CCC_Register()
 
 	// General video control
 	CMD1(CCC_VidMode, "vid_mode");
+#ifndef DEDICATED_SERVER
+	CMD1(CCC_VidMonitor, "vid_monitor");
+#endif
 
 #ifdef DEBUG
     CMD3(CCC_Token, "vid_bpp", &psCurrentBPP, vid_bpp_token);
@@ -1058,6 +1134,31 @@ void CCC_Register()
 	// Doppler effect power
 	CMD4(CCC_Float, "snd_doppler_power", &soundSmoothingParams::power, 0.f, 5.f);
 	CMD4(CCC_SoundParamsSmoothing, "snd_doppler_smoothing", &soundSmoothingParams::steps, 1, 100);
+
+    // EFX Reverb overwrite
+    CMD4(CCC_Integer, "snd_efx_reverb_overwrite", &reverb_overwrite, FALSE, TRUE);
+
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_density", &psReverbDensity, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_diffusion", &psReverbDiffusion, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_gain", &psReverbGain, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_gain_hf", &psReverbGainHF, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_gain_lf", &psReverbGainLF, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_decay_time", &psReverbDecayTime, 0.1f, 20.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_decay_hf_ratio", &psReverbDecayHFRatio, 0.1f, 20.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_decay_lf_ratio", &psReverbDecayLFRatio, 0.1f, 20.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_reflections_gain", &psReverbReflectionsGain, 0.f, 3.16f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_reflections_delay", &psReverbReflectionsDelay, 0.f, 0.3f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_late_reverb_gain", &psReverbLateReverbGain, 0.f, 10.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_late_reverb_delay", &psReverbLateReverbDelay, 0.f, 0.1f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_echo_time", &psReverbEchoTime, 0.075f, 0.25f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_echo_depth", &psReverbEchoDepth, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_modulation_time", &psReverbModulationTime, 0.04f, 4.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_modulation_depth", &psReverbModulationDepth, 0.f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_air_absorption_gain_hf", &psReverbAirAbsorptionGainHF, 0.892f, 1.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_hf_reference", &psReverbHFReference, 1000.f, 20000.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_lf_reference", &psReverbLFReference, 20.f, 1000.f);
+    CMD4(CCC_Float, "snd_efx_reverb_overwrite_room_rolloff_factor", &psReverbRoomRolloffFactor, 0.f, 10.f);
+    CMD4(CCC_Integer, "snd_efx_reverb_overwrite_decay_hf_limit", &psReverbDecayHFLimit, FALSE, TRUE);
 
 #ifdef DEBUG
     CMD3(CCC_Mask, "snd_stats", &g_stats_flags, st_sound);
@@ -1116,7 +1217,7 @@ void CCC_Register()
 	CMD2(CCC_Color, "g_crosshair_color", &g_crosshair_color);
 	CMD4(CCC_Float, "mouse_sens_aim", &g_AimLookFactor, 0.01f, 5.0f);
 
-	if (strstr(Core.Params, "-dbgdev"))
+	if (Core.ParamsData.test(ECoreParams::dbgdev))
 		CMD4(CCC_Float, "g_freelook_z_offset_factor", &g_freelook_z_offset, -3.f, 3.f);
 
 	CMD4(CCC_Float, "g_ironsights_zoom_factor", &g_ironsights_factor, 1.f, 2.f);

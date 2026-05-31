@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "HudItem.h"
 #include "physic_item.h"
 #include "actor.h"
@@ -113,10 +113,10 @@ void CHudItem::PlaySound(LPCSTR alias, const Fvector& position, u8 index)
 
 //-Alundaio
 
-void CHudItem::renderable_Render()
+void CHudItem::renderable_Render(IDSGraphManager* DM)
 {
 	UpdateXForm();
-	BOOL _hud_render = ::Render->get_HUD() && GetHUDmode();
+	BOOL _hud_render = DM->get_HUD() && GetHUDmode();
 
 	if (_hud_render && !IsHidden())
 	{
@@ -125,16 +125,18 @@ void CHudItem::renderable_Render()
 	{
 		if (!object().H_Parent() || (!_hud_render && !IsHidden()))
 		{
-			on_renderable_Render();
+			on_renderable_Render(DM);
 			debug_draw_firedeps();
 		}
 		else if (object().H_Parent())
 		{
 			CInventoryOwner* owner = smart_cast<CInventoryOwner*>(object().H_Parent());
-			VERIFY(owner);
-			CInventoryItem* self = smart_cast<CInventoryItem*>(this);
-			if (owner->attached(self))
-				on_renderable_Render();
+            if (owner)
+            {
+                CInventoryItem* self = smart_cast<CInventoryItem*>(this);
+                if (owner->attached(self))
+                    on_renderable_Render(DM);
+            }			
 		}
 	}
 }
@@ -202,6 +204,12 @@ void CHudItem::OnStateSwitch(u32 S, u32 oldState)
 	}
 
 	g_player_hud->updateMovementLayerState();
+
+	::luabind::functor<void> funct;
+	if (ai().script_engine().functor("_G.CHudItem__OnStateSwitch", funct))
+	{
+		funct(smart_cast<CGameObject*>(this)->lua_game_object(), S, oldState);
+	}
 }
 
 void CHudItem::OnAnimationEnd(u32 state)
@@ -1205,7 +1213,7 @@ CAnonHudItem::~CAnonHudItem() { }
 
 void CAnonHudItem::UpdateXForm() { }
 
-void CAnonHudItem::on_renderable_Render() { }
+void CAnonHudItem::on_renderable_Render(IDSGraphManager* DM) { }
 
 #ifdef ATTACHMENT_HUD_VISBOX
 void VisualCallbackHud(IKinematics* tpKinematics)

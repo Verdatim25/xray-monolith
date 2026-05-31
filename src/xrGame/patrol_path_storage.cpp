@@ -102,7 +102,7 @@ void CPatrolPathStorage::load_from_config()
 	for (CInifile::Root::iterator i = paths.begin(), ie = paths.end(); i != ie; ++i)
 	{
 		// Get patrol path name
-		LPCSTR patrol_name = (*i)->Name.c_str();
+		LPCSTR patrol_name = (*i).Name.c_str();
 
 		Msg("[PP] Reading section %s", patrol_name);
 
@@ -149,4 +149,15 @@ void CPatrolPathStorage::save(IWriter& stream)
 	}
 
 	stream.close_chunk();
+}
+
+void CPatrolPathStorage::remove_path(shared_str patrol_name)
+{
+	m_registry.erase(patrol_name);
+}
+
+void CPatrolPathStorage::add_path(shared_str patrol_name, CPatrolPath *path)
+{
+	remove_path(patrol_name);
+	m_registry.insert(std::make_pair(patrol_name, path));
 }

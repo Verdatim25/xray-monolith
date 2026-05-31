@@ -58,6 +58,7 @@ static bool SimmulateNetworkLag()
 
 void CLevel::ClientReceive()
 {
+	PROF_EVENT("CLevel::ClientReceive");
 	m_dwRPC = 0;
 	m_dwRPS = 0;
 
@@ -99,21 +100,19 @@ void CLevel::ClientReceive()
 				cl_Process_Spawn(*P);
 				/*/
 				//Msg("--- Client received M_SPAWN message...");
+                xrSRWLockGuard g(prefetch_lock);
 				game_events->insert(*P);
 				if (g_bDebugEvents) ProcessGameEvents();
 				//*/
 			}
 			break;
 		case M_EVENT:
-			/*if (!game_configured)
-			{
-				Msg("! WARNING: ignoring game event [%d] - game not configured...", m_type);
-				break;
-			}*/
-			//Msg("Client received M_EVENT message...");
-			game_events->insert(*P);
-			if (g_bDebugEvents) ProcessGameEvents();
-			break;
+            {
+                xrSRWLockGuard g(prefetch_lock);
+                game_events->insert(*P);
+                if (g_bDebugEvents) ProcessGameEvents();
+            }
+            break;
 		case M_EVENT_PACK:
 			{
 				/*if (!game_configured)
@@ -122,6 +121,7 @@ void CLevel::ClientReceive()
 					break;
 				}*/
 				NET_Packet tmpP;
+                xrSRWLockGuard g(prefetch_lock);
 				while (!P->r_eof())
 				{
 					tmpP.B.count = P->r_u8();
@@ -207,6 +207,7 @@ void CLevel::ClientReceive()
 					Msg("! WARNING: ignoring game event [%d] - game not configured...", m_type);
 					break;
 				}*/
+                xrSRWLockGuard g(prefetch_lock);
 				game_events->insert(*P);
 				if (g_bDebugEvents) ProcessGameEvents();
 			}
@@ -298,6 +299,7 @@ void CLevel::ClientReceive()
 					break;
 				}*/
 				if (!game) break;
+                xrSRWLockGuard g(prefetch_lock);
 				game_events->insert(*P);
 				if (g_bDebugEvents) ProcessGameEvents();
 			}
@@ -309,6 +311,10 @@ void CLevel::ClientReceive()
 #ifdef DEBUG
 				Msg("--- Changing level message received...");
 #endif // #ifdef DEBUG
+                Msg("Device.LuaGC clear");
+                Device.LuaGC.clear();
+                Device.LuaGCDebug.clear();
+
 				if (m_type == M_LOAD_GAME)
 				{
 					string256 saved_name;
@@ -463,6 +469,7 @@ void CLevel::ClientReceive()
 			{
 				Msg("--- CL: On Update Request");
 				if (!game) break;
+                xrSRWLockGuard g(prefetch_lock);
 				game_events->insert(*P);
 				if (g_bDebugEvents) ProcessGameEvents();
 			}
@@ -477,6 +484,7 @@ void CLevel::ClientReceive()
 			break;
 		case M_FILE_TRANSFER:
 			{
+                xrSRWLockGuard g(prefetch_lock);
 				game_events->insert(*P);
 				if (g_bDebugEvents) ProcessGameEvents();
 			}

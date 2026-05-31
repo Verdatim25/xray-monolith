@@ -46,7 +46,7 @@ namespace gamespy_gp
 	DECLARE_SCRIPT_REGISTER_FUNCTION
 	}; //struct profile
 
-	//typedef fastdelegate::FastDelegate<void (profile const *, shared_str const &)>	login_operation_cb;
+	//typedef xr_delegate<void (profile const *, shared_str const &)>	login_operation_cb;
 	typedef mixed_delegate<void (profile const*, char const*), mdut_login_operation_cb_tag> login_operation_cb;
 
 	class login_manager : private xray::noncopyable
@@ -151,18 +151,5 @@ namespace gamespy_gp
 typedef gamespy_gp::profile gamespy_gp_profile;
 typedef gamespy_gp::login_operation_cb gamespy_gp_login_operation_cb;
 typedef gamespy_gp::login_manager gamespy_gp_login_manager;
-
-add_to_type_list(gamespy_gp_profile)
-#undef script_type_list
-#define script_type_list save_type_list(gamespy_gp_profile)
-
-add_to_type_list(gamespy_gp_login_operation_cb)
-#undef script_type_list
-#define script_type_list save_type_list(gamespy_gp_login_operation_cb)
-
-add_to_type_list(gamespy_gp_login_manager)
-#undef script_type_list
-#define script_type_list save_type_list(gamespy_gp_login_manager)
-
 
 #endif //#ifndef LOGIN_MANAGER

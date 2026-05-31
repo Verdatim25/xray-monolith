@@ -1,4 +1,4 @@
-﻿#include "pch_script.h"
+#include "pch_script.h"
 #include "Actor_Flags.h"
 #include "hudmanager.h"
 #ifdef DEBUG
@@ -113,6 +113,8 @@ static Fbox bbCrouchBox;
 static Fvector vFootCenter;
 static Fvector vFootExt;
 
+int showActorBody = 0;
+
 Flags32 psActorFlags = {AF_GODMODE_RT | AF_AUTOPICKUP | AF_RUN_BACKWARD | AF_IMPORTANT_SAVE | AF_USE_TRACERS};
 int psActorSleepTime = 1;
 
@@ -126,7 +128,7 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 	//Alundaio -psp always
 	/*
-    if (strstr(Core.Params, "-psp"))
+    if (Core.ParamsData.test(ECoreParams::psp))
         psActorFlags.set(AF_PSP, TRUE);
     else
         psActorFlags.set(AF_PSP, FALSE);
@@ -154,7 +156,7 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 	fCurAVelocity = 0.0f;
 	fFPCamYawMagnitude = 0.0f; //--#SM+#--
 	fFPCamPitchMagnitude = 0.0f; //--#SM+#--
-	// ýôôåêòîðû
+	// Эффекторы (Effectors)
 	pCamBobbing = 0;
 
 	cam_freelook = eflDisabled;
@@ -192,7 +194,7 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
     Device.seqRender.Add	(this,REG_PRIORITY_LOW);
 #endif
 
-	//ðàçðåøèòü èñïîëüçîâàíèå ïîÿñà â inventory
+	// Разрешить использование пояса в inventory (Allow use of belt in inventory)
 	inventory().SetBeltUseful(true);
 
 	m_pPersonWeLookingAt = NULL;
@@ -260,6 +262,7 @@ CActor::CActor() : CEntityAlive(), current_ik_cam_shift(0)
 
 CActor::~CActor()
 {
+    m_legs_controller.destroy();
 	xr_delete(m_location_manager);
 	xr_delete(m_memory);
 	xr_delete(game_news_registry);
@@ -362,12 +365,10 @@ void CActor::Load(LPCSTR section)
 	if (GameID() == eGameIDSingle)
 		OnDifficultyChanged();
 	//////////////////////////////////////////////////////////////////////////
-	ISpatial* self = smart_cast<ISpatial*>(this);
-	if (self)
-	{
-		self->spatial.type |= STYPE_VISIBLEFORAI;
-		self->spatial.type &= ~STYPE_REACTTOSOUND;
-	}
+
+	SpatialComponent->spatial.type	|=	STYPE_VISIBLEFORAI;
+	SpatialComponent->spatial.type	&= ~STYPE_REACTTOSOUND;
+
 	//////////////////////////////////////////////////////////////////////////
 
 	// m_PhysicMovementControl: General
@@ -495,7 +496,7 @@ void CActor::Load(LPCSTR section)
 	// sheduler
 	shedule.t_min = shedule.t_max = 1;
 
-	// íàñòðîéêè äèñïåðñèè ñòðåëüáû
+	// Настройки дисперсии стрельбы (Dispersion settings for shooting)
 	m_fDispBase = pSettings->r_float(section, "disp_base");
 	m_fDispBase = deg2rad(m_fDispBase);
 
@@ -528,6 +529,8 @@ void CActor::Load(LPCSTR section)
 	m_sInventoryBoxUseAction = "inventory_box_use";
 	//---------------------------------------------------------------------
 	m_sHeadShotParticle = READ_IF_EXISTS(pSettings, r_string, section, "HeadShotParticle", 0);
+
+    m_legs_controller.destroy();
 }
 
 void CActor::set_actor_box_y_offset(u32 box_num, float offset)
@@ -582,21 +585,21 @@ void CActor::Hit(SHit* pHDS)
 			if (Device.dwFrame != last_hit_frame &&
 				HDS.bone() != BI_NONE)
 			{
-				// âû÷èñëèòü ïîçèöèþ è íàïðàâëåííîñòü ïàðòèêëà
+				// вычислить позицию и направленность партикла (Calculate position and direction of particle)
 				Fmatrix pos;
 
 				CParticlesPlayer::MakeXFORM(this, HDS.bone(), HDS.dir, HDS.p_in_bone_space, pos);
 
-				// óñòàíîâèòü particles
-				CParticlesObject* ps = NULL;
+				// установить particles (Set particles)
+				intrusive_ptr<CParticlesObject> ps_ = nullptr;
 
 				if (eacFirstEye == cam_active && this == Level().CurrentEntity())
-					ps = CParticlesObject::Create(invincibility_fire_shield_1st, TRUE);
+					ps_ = Particles::Details::Create(invincibility_fire_shield_1st,TRUE);
 				else
-					ps = CParticlesObject::Create(invincibility_fire_shield_3rd, TRUE);
+					ps_ = Particles::Details::Create(invincibility_fire_shield_3rd,TRUE);
 
-				ps->UpdateParent(pos, Fvector().set(0.f, 0.f, 0.f));
-				GamePersistent().ps_needtoplay.push_back(ps);
+				ps_->UpdateParent(pos, Fvector().set(0.f, 0.f, 0.f));
+				GamePersistent().ps_needtoplay.push_back(ps_);
 			};
 		};
 
@@ -914,7 +917,7 @@ void CActor::Die(CObject* who)
 		};
 
 
-		///!!! ÷èñòêà ïîÿñà
+		///!!! чистка пояса (Belt cleanup)
 		TIItemContainer& l_blist = inventory().m_belt;
 		while (!l_blist.empty())
 			inventory().Ruck(l_blist.front());
@@ -1053,27 +1056,28 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
 
 	if (Local() && g_Alive())
 	{
-		if (character_physics_support()->movement()->gcontact_Was)
-			Cameras().AddCamEffector(xr_new<CEffectorFall>(character_physics_support()->movement()->gcontact_Power));
+        CPHMovementControl* const mctrl = character_physics_support()->movement();
 
-		if (!fis_zero(character_physics_support()->movement()->gcontact_HealthLost))
+		if (mctrl->gcontact_Was)
+			Cameras().AddCamEffector(xr_new<CEffectorFall>(mctrl->gcontact_Power));
+
+		if (!fis_zero(mctrl->gcontact_HealthLost))
 		{
-			VERIFY(character_physics_support());
-			VERIFY(character_physics_support()->movement());
-			ICollisionDamageInfo* di = character_physics_support()->movement()->CollisionDamageInfo();
+			ICollisionDamageInfo* di = mctrl->CollisionDamageInfo();
 			VERIFY(di);
 			bool b_hit_initiated = di->GetAndResetInitiated();
+            CObject* initiator = mctrl->gcontact_Initiator ? mctrl->gcontact_Initiator : di->DamageInitiator();
 			Fvector hdir;
 			di->HitDir(hdir);
-			SetHitInfo(this, NULL, 0, Fvector().set(0, 0, 0), hdir);
+			SetHitInfo(initiator, NULL, 0, Fvector().set(0, 0, 0), hdir);
 			//				Hit	(m_PhysicMovementControl->gcontact_HealthLost,hdir,di->DamageInitiator(),m_PhysicMovementControl->ContactBone(),di->HitPos(),0.f,ALife::eHitTypeStrike);//s16(6 + 2*::Random.randI(0,2))
 			if (Level().CurrentControlEntity() == this)
 			{
-				SHit HDS = SHit(character_physics_support()->movement()->gcontact_HealthLost,
+				SHit HDS = SHit(mctrl->gcontact_HealthLost,
 				                //.								0.0f,
 				                hdir,
-				                di->DamageInitiator(),
-				                character_physics_support()->movement()->ContactBone(),
+				                initiator,
+				                mctrl->ContactBone(),
 				                di->HitPos(),
 				                0.f,
 				                di->HitType(),
@@ -1083,8 +1087,8 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
 
 				NET_Packet l_P;
 				HDS.GenHeader(GE_HIT, ID());
-				HDS.whoID = di->DamageInitiator()->ID();
-				HDS.weaponID = di->DamageInitiator()->ID();
+				HDS.whoID = initiator->ID();
+				HDS.weaponID = initiator->ID();
 				HDS.Write_Packet(l_P);
 
 				u_EventSend(l_P);
@@ -1135,6 +1139,7 @@ bool CActor::scopeCameraMatrix(Fmatrix& camera)
 
 void CActor::UpdateCL()
 {
+	PROF_EVENT("CActor UpdateCL");
 	if (g_Alive() && Level().CurrentViewEntity() == this)
 	{
 		if (CurrentGameUI() && (!CurrentGameUI()->TopInputReceiver() || (CurrentGameUI()->TopInputReceiver() && !CurrentGameUI()->TopInputReceiver()->StopAnyMove())) && !m_holder)
@@ -1187,6 +1192,7 @@ void CActor::UpdateCL()
 	CWeapon* pWeapon = smart_cast<CWeapon*>(inventory().ActiveItem());
 
 	cam_Update(float(Device.dwTimeDelta) / 1000.0f, currentFOV());
+    m_legs_controller.update(this);
 
 #ifdef STATIONARYMGUN_NEW
 	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(Holder());
@@ -1278,7 +1284,7 @@ void CActor::UpdateCL()
 	if (g_Alive())
 		CStepManager::update(this == Level().CurrentViewEntity());
 
-	spatial.type |= STYPE_REACTTOSOUND;
+	SpatialComponent->spatial.type |= STYPE_REACTTOSOUND;
 
 	if (m_sndShockEffector)
 	{
@@ -1587,12 +1593,21 @@ void CActor::detach_Vehicle(bool bForce)
 		CCar *car = smart_cast<CCar *>(m_holder);
 #ifdef CAR_NEW
 		if (car && car->IsRemoteControl() == false)
-#endif
 		{
 			character_physics_support()->movement()->SetPosition(m_holder->ExitPosition());
 			character_physics_support()->movement()->SetVelocity(m_holder->ExitVelocity());
 			cam_Active()->Direction().set(Fvector().setHP(GO->Direction().getH(), 0.0F));
 		}
+#endif
+#ifdef STATIONARYMGUN_NEW
+		CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(m_holder);
+		if (stm)
+		{
+			character_physics_support()->movement()->SetPosition(m_holder->ExitPosition());
+			character_physics_support()->movement()->SetVelocity(m_holder->ExitVelocity());
+			cam_Active()->Direction().set(Fvector().setHP(GO->Direction().getH(), 0.0F));
+		}
+#endif
 
 		m_holder->detach_Actor();
 		m_holder = NULL;
@@ -1769,6 +1784,7 @@ void CActor::set_state_box(u32 mstate)
 
 void CActor::shedule_Update(u32 DT)
 {
+	PROF_EVENT("CActor shedule_Update");
 	setSVU(OnServer());
 	//.	UpdateInventoryOwner			(DT);
 
@@ -1925,7 +1941,7 @@ void CActor::shedule_Update(u32 DT)
 
 	inherited::shedule_Update(DT);
 
-	//ýôôåêòîð âêëþ÷àåìûé ïðè õîäüáå
+	// Эффектор, включаемый при ходьбе (Effector enabled while walking)
 	if (!pCamBobbing)
 	{
 		pCamBobbing = xr_new<CEffectorBobbing>();
@@ -1933,7 +1949,7 @@ void CActor::shedule_Update(u32 DT)
 	}
 	pCamBobbing->SetState(mstate_real, conditions().IsLimping(), IsZoomAimingMode());
 
-	//çâóê òÿæåëîãî äûõàíèÿ ïðè óòàëîñòè è õðîìàíèè
+	// Звук тяжелого дыхания при усталости и хромании (Heavy breathing sound when tired or limping)
 	if (this == Level().CurrentControlEntity() && !g_dedicated_server)
 	{
 		if (conditions().IsLimping() && g_Alive() && !psActorFlags.test(AF_GODMODE_RT))
@@ -2001,11 +2017,11 @@ void CActor::shedule_Update(u32 DT)
 			m_DangerSnd.stop();
 	}
 
-	//åñëè â ðåæèìå HUD, òî ñàìà ìîäåëü àêòåðà íå ðèñóåòñÿ
+	// если в режиме HUD, то сама модель актера не рисуется (If in HUD mode, the actor model is not drawn)
 	if (!character_physics_support()->IsRemoved())
 		setVisible(TRUE);
 
-	//÷òî àêòåð âèäèò ïåðåä ñîáîé
+	// что актер видит перед собой (What the actor sees in front of him)
 	collide::rq_result& RQ = HUD().GetRQ();
 
 
@@ -2013,7 +2029,7 @@ void CActor::shedule_Update(u32 DT)
 	{
 		m_pObjectWeLookingAt = smart_cast<CGameObject*>(RQ.O);
 
-		CGameObject* game_object = smart_cast<CGameObject*>(RQ.O);
+		CGameObject* game_object = m_pObjectWeLookingAt;
 		m_pUsableObject = smart_cast<CUsableScriptObject*>(game_object);
 		m_pInvBoxWeLookingAt = smart_cast<CInventoryBox*>(game_object);
 		m_pPersonWeLookingAt = smart_cast<CInventoryOwner*>(game_object);
@@ -2080,23 +2096,21 @@ void CActor::shedule_Update(u32 DT)
 		m_pInvBoxWeLookingAt = NULL;
 	}
 
-	//	UpdateSleep									();
-
-	//äëÿ ñâîéñò àðòåôàêòîâ, íàõîäÿùèõñÿ íà ïîÿñå
+	// для свойств артефактов, находящихся на поясе (For properties of artefacts on the belt)
 	UpdateArtefactsOnBeltAndOutfit();
 	m_pPhysics_support->in_shedule_Update(DT);
 	Check_for_AutoPickUp();
 };
 
-void CActor::RenderCamAttached()
+void CActor::RenderCamAttached(IDSGraphManager* DM)
 {
 	if (cam_active == eacFirstEye && ::Render->active_phase() == 0)
 	{
 		if (GetAttachments()->size())
 		{
-			::Render->set_HUD(TRUE);
-			::Render->set_CamAttached(TRUE);
-			::Render->set_Object(this);
+			DM->set_HUD(TRUE);
+			DM->set_CamAttached(TRUE);
+			DM->set_Object(this);
 
 			Fmatrix cam = Fidentity;
 			Cameras().camera_Matrix(cam);
@@ -2106,19 +2120,23 @@ void CActor::RenderCamAttached()
 				script_attachment* att = pair.second;
 
 				if (att->GetType() == eSA_CamAttached)
-					att->Render(nullptr, &cam);
+					att->Render(nullptr, &cam, DM);
 			}
 
-			::Render->set_CamAttached(FALSE);
-			::Render->set_HUD(FALSE);
+			DM->set_CamAttached(FALSE);
+			DM->set_HUD(FALSE);
 		}
 	}
 }
 
+#include "../xrEngine/FDemoRecord.h"
+extern xr_unordered_set<CDemoRecord*> pDemoRecords;
 extern Flags32 ps_actor_shadow_flags;
-
+BOOL r__actor_shadow_in_demo_record = TRUE;
 bool CActor::AllowActorShadow()
 {
+    if (!r__actor_shadow_in_demo_record && !pDemoRecords.empty()) return false;
+    if (!r__actor_shadow_in_demo_record && m_FPCam) return false;
 	if (!ps_actor_shadow_flags.test(1)) return false;
 	if (::Render->get_generation() != ::Render->GENERATION_R2) return false;
 
@@ -2130,31 +2148,129 @@ bool CActor::AllowActorShadow()
 }
 
 #include "debug_renderer.h"
-void CActor::renderable_Render()
+BOOL legs_in_demo_record = FALSE;
+BOOL legs_in_low_crouch = FALSE;
+BOOL legs_render_attachments_shadow = TRUE;
+extern BOOL g_legs_enabled;
+
+bool canRenderLegs(CActor* actor, CHolderCustom* m_holder) noexcept
+{
+    return g_legs_enabled
+        && (legs_in_low_crouch || !(actor->MovingState() & mcCrouch && actor->MovingState() & mcAccel))
+        && g_player_hud
+        && !m_holder
+        && (legs_in_demo_record || pDemoRecords.empty())
+        && showActorBody == 0
+        && !actor->m_FPCam;
+};
+
+void CActor::renderable_Render(IDSGraphManager* DM)
 {
 	VERIFY(_valid(XFORM()));
-	
+
+    // leg shadows are disabled for DX8 and DX9
+    bool validRendererForShadow = (::Render->get_generation() == ::Render->GENERATION_R2) && (::Render->get_dx_level() != 0x00090000);
+
 	if (cam_active == eacFirstEye)
 	{
 		if (::Render->active_phase() == 0) // can render first person body here
 		{
+			if (canRenderLegs(this, m_holder))
+			{
+				m_legs_controller.render(DM);
+			}
+
+            if (showActorBody == 1 || showActorBody == 2)
+            {
+                inherited::renderable_Render(DM);
+
+                if (showActorBody == 2)
+                {
+                    CInventoryOwner::renderable_Render(DM);
+                }
+            }
+
 			//if (fpBody) 
-			//	inherited::renderable_Render();
+			//	inherited::renderable_Render(DM);
 		}
 		else if (AllowActorShadow()) // render actor shadow
 		{
-			inherited::renderable_Render();
-			if ((IsFocused() || (!(IsFocused() && ((!m_holder) ||
-				(m_holder && m_holder->allowWeapon() && m_holder->HUDView()))))))
-				CInventoryOwner::renderable_Render();
+            if (validRendererForShadow)
+            {
+                static u32 renderFrame = 0;
+                bool needAdjust = false;
+                if (Device.dwFrame != renderFrame)
+                {
+                    renderFrame = Device.dwFrame;
+                    needAdjust = true;
+                }
+                
+                if (canRenderLegs(this, m_holder))
+                {
+                    Fvector diff(XFORMShadow.c);
+                    diff.sub(XFORM().c);
+                    float m = diff.magnitude();
+                    diff.normalize_safe();
+
+                    // Render full body from legs controller without hiding bones for shadow correctness
+                    // Solves potential issues with manipulating actor's XFORM
+                        m_legs_controller.update(this, true);
+                        m_legs_controller.render(DM);
+
+                        // Ideally the active item also should be duplicated but leave this for now
+                        // Move active item
+                        PIItem pItem = inventory().ActiveItem();
+                    if (pItem)
+                    {
+                        auto& v = pItem->object();
+                        if (needAdjust)
+                            v.XFORM().c.mad(diff, m);
+                        v.renderable_Render(DM);
+                    }
+
+                    // Move torch
+                    if (legs_render_attachments_shadow)
+                    {
+                        for (const auto& I : m_attached_objects)
+                        {
+                            auto& v = I->object();
+                            if (needAdjust)
+                                v.XFORM().c.mad(diff, m);
+                            v.renderable_Render(DM);
+                        }
+                    }
+
+                    // Move bolt
+                    if (inventory().GetActiveSlot() == BOLT_SLOT)
+                    {
+                        auto bI = inventory().ItemFromSlot(BOLT_SLOT);
+                        if (bI)
+                        {
+                            auto& v = bI->object();
+                            if (needAdjust)
+                                v.XFORM().c.mad(diff, m);
+                        }
+                    }
+                }
+                else
+                {
+                    inherited::renderable_Render(DM);
+                    CInventoryOwner::renderable_Render(DM);
+                }
+            }
+            else
+            {
+                inherited::renderable_Render(DM);
+                CInventoryOwner::renderable_Render(DM);
+            }			
 		}
 	}
 
-// Third Person Body and Weapon/Item
+	// Third Person Body and Weapon/Item
 	else
 	{
-		inherited::renderable_Render();
-		CInventoryOwner::renderable_Render();
+		inherited::renderable_Render(DM);
+		CInventoryOwner::renderable_Render(DM);
 	}
 }
 
@@ -2162,6 +2278,9 @@ BOOL CActor::renderable_ShadowGenerate()
 {
 	if (m_holder)
 		return FALSE;
+
+    if (::Render->get_generation() == ::Render->GENERATION_R1 && cam_active == eacFirstEye && canRenderLegs(this, m_holder))
+        return FALSE;
 
 	return inherited::renderable_ShadowGenerate();
 }
@@ -2200,12 +2319,12 @@ extern	BOOL	g_ShowAnimationInfo		;
 #endif // DEBUG
 // HUD
 
-void CActor::OnHUDDraw(CCustomHUD*)
+void CActor::OnHUDDraw(CCustomHUD* Z, IDSGraphManager* DM)
 {
 	R_ASSERT(IsFocused());
 	//demonized: disable hud when FPCam is on
 	if (!((mstate_real & mcLookout) && !IsGameTypeSingle()) && (!m_FPCam || m_FPCam->hudEnabled))
-		g_player_hud->render_hud();
+		g_player_hud->render_hud(DM);
 
 
 #if 0//ndef NDEBUG
@@ -2299,7 +2418,6 @@ void CActor::RenderText(LPCSTR Text, Fvector dpos, float* pdup, u32 color)
 
 	Fmatrix M;
 	Visual()->dcast_PKinematics()->CalculateBones();
-	smart_cast<IKinematics*>(Visual())->CalculateBones();
 	M.mul(XFORM(), Visual()->dcast_PKinematics()->LL_GetTransform(m_head));
 	//------------------------------------------------
 	Fvector v0, v1;
@@ -2474,6 +2592,7 @@ void CActor::OnItemBelt(CInventoryItem* inventory_item, const SInvItemPlace& pre
 
 void CActor::UpdateArtefactsOnBeltAndOutfit()
 {
+	PROF_EVENT();
 	static float update_time = 0;
 
 	float f_update_time = 0;
@@ -2694,12 +2813,12 @@ bool CActor::can_attach(const CInventoryItem* inventory_item) const
 	if (!item || /*!item->enabled() ||*/ !item->can_be_attached())
 		return (false);
 
-	//ìîæíî ëè ïðèñîåäèíÿòü îáúåêòû òàêîãî òèïà
+	// можно ли присоединять объекты такого типа (Can objects of this type be attached)
 	if (m_attach_item_sections.end() == std::find(m_attach_item_sections.begin(), m_attach_item_sections.end(),
 	                                              inventory_item->object().cNameSect()))
 		return false;
 
-	//åñëè óæå åñòü ïðèñîåäèííåíûé îáúåò òàêîãî òèïà 
+	// если уже есть присоединенный объект такого типа (If there is already an attached object of this type)
 	if (attached(inventory_item->object().cNameSect()))
 		return false;
 

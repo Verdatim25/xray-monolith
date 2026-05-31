@@ -35,9 +35,9 @@ void SStaticSound::Update(u32 game_time, u32 global_time)
 	{
 		if (0 == m_Source._feedback())
 		{
-			Fvector occ[3];
-			const float occluder_volume = Sound->get_occlusion(m_Position, .2f, occ);
-			const float vol = m_Volume * occluder_volume;
+			// Static level sounds are occluded again by the emitter, so keep the
+			// authored level volume here to avoid double attenuation.
+			const float vol = m_Volume;
 
 			if ((0 == m_PauseTime.x) && (0 == m_PauseTime.y))
 			{
@@ -192,13 +192,16 @@ void CLevelSoundManager::Load()
 				CInifile::Sect& S = gameLtx.r_section(music_sect);
 				std::random_device rd;
 				std::mt19937 g(rd());
-				std::shuffle(S.Data.begin(), S.Data.end(), g);
-				CInifile::SectCIt it = S.Data.begin(), end = S.Data.end();
-				m_MusicTracks.reserve(S.Data.size());
-				for (; it != end; it++)
+
+				// copy data and shuffle
+				CInifile::Items items = S.Data;
+				std::shuffle(items.begin(), items.end(), g);
+
+				m_MusicTracks.reserve(items.size());
+				for (const auto& entry : items)
 				{
-					m_MusicTracks.push_back(SMusicTrack());
-					m_MusicTracks.back().Load(*it->first, *it->second);
+					m_MusicTracks.emplace_back();
+					m_MusicTracks.back().Load(*entry.first, *entry.second);
 				}
 			}
 		}
@@ -216,6 +219,7 @@ void CLevelSoundManager::Unload()
 
 void CLevelSoundManager::Update()
 {
+	PROF_EVENT("CLevelSoundManager::Update");
 	if (Device.Paused()) return;
 	if (Device.dwPrecacheFrame != 0) return;
 	// static sounds

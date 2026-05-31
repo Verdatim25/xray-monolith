@@ -39,6 +39,9 @@
 #include "hudmanager.h"
 #include "ui\UIMainIngameWnd.h"
 #include "ui\UIHudStatesWnd.h"
+#include "ui\UIPdaWnd.h"
+#include "ui\UITaskWnd.h"
+#include "ui\UIMapWnd.h"
 #include "raypick.h"
 #include "../xrcdb/xr_collide_defs.h"
 #include "../xrEngine/Rain.h"
@@ -58,6 +61,9 @@
 #include "ui\UILogsWnd.h"
 #include "game_news.h"
 #include "alife_registry_wrappers.h"
+#include "cover_manager.h"
+#include "cover_point.h"
+#include "ActorCondition.h"
 
 using namespace luabind;
 
@@ -156,12 +162,40 @@ LPCSTR get_weather()
 	return (*g_pGamePersistent->Environment().GetWeather());
 }
 
+// demonized: get current weather interpolation
+float get_weather_weight()
+{
+    return g_pGamePersistent->Environment().CurrentEnv->weight;
+}
+
+void set_weather_weight(float weight)
+{
+    g_pGamePersistent->Environment().set_lerp(weight);
+}
+
 void set_weather(LPCSTR weather_name, bool forced)
 {
 #ifdef INGAME_EDITOR
 	if (!Device.editor())
 #endif // #ifdef INGAME_EDITOR
 	g_pGamePersistent->Environment().SetWeather(weather_name, forced);
+}
+
+// demonized: Sets weather and force updates next environment so the interpolation will happen between current environment and next weather's environment
+void set_weather_smooth(LPCSTR weather_name)
+{
+#ifdef INGAME_EDITOR
+    if (!Device.editor())
+#endif // #ifdef INGAME_EDITOR
+    g_pGamePersistent->Environment().SetWeather(weather_name, false);
+    if (g_pGamePersistent->Environment().Current[1] && g_pGamePersistent->Environment().CurrentWeather)
+    {
+        g_pGamePersistent->Environment().SelectEnv(
+            g_pGamePersistent->Environment().CurrentWeather,
+            g_pGamePersistent->Environment().Current[1],
+            g_pGamePersistent->Environment().GetGameTime());
+    }
+    
 }
 
 bool set_weather_fx(LPCSTR weather_name)
@@ -290,6 +324,28 @@ void change_game_time(u32 days, u32 hours, u32 mins)
 		g_pGamePersistent->Environment().ChangeGameTime(fValue);
 		tpGame->alife().time_manager().change_game_time(value);
 	}
+}
+
+::luabind::object get_nearby_covers(const Fvector &pos, float radius)
+{
+	xr_vector<CCoverPoint *> nearby_covers;
+	nearby_covers.clear();
+	ai().cover_manager().covers().nearest(pos, radius, nearby_covers);
+	::luabind::object lua_table = ::luabind::newtable(ai().script_engine().lua());
+	for (auto &I : nearby_covers)
+	{
+		lua_table[I->level_vertex_id()] = true;
+	}
+	return lua_table;
+}
+
+u32 vertex_link(u32 level_vertex_id, int index)
+{
+	if (!ai().level_graph().valid_vertex_id(level_vertex_id))
+	{
+		return u32(-1);
+	}
+	return ai().level_graph().vertex(level_vertex_id)->link(index);
 }
 
 float high_cover_in_direction(u32 level_vertex_id, const Fvector& direction)
@@ -449,6 +505,35 @@ CUIStatic* map_get_minimap_spot_static(u16 id, LPCSTR spot_type)
 u16 map_has_object_spot(u16 id, LPCSTR spot_type)
 {
 	return Level().MapManager().HasMapLocation(spot_type, id);
+}
+
+void map_pan_to(LPCSTR level_name, float x, float z, bool zoom_in)
+{
+	CUIGameCustom* gameUI = CurrentGameUI();
+	if (!gameUI) return;
+	CUITaskWnd* taskWnd = gameUI->GetPdaMenu().pUITaskWnd;
+	if (!taskWnd) return;
+	CUIMapWnd* mapWnd = taskWnd->GetMapWnd();
+	if (!mapWnd) return;
+	mapWnd->SetTargetMap(shared_str(level_name),
+		Fvector2().set(x, z),
+		zoom_in);
+}
+
+void map_pan_to_level(LPCSTR level_name, bool zoom_in)
+{
+	CUIGameCustom* gameUI = CurrentGameUI();
+	if (!gameUI) return;
+	CUITaskWnd* taskWnd = gameUI->GetPdaMenu().pUITaskWnd;
+	if (!taskWnd) return;
+	CUIMapWnd* mapWnd = taskWnd->GetMapWnd();
+	if (!mapWnd) return;
+	mapWnd->SetTargetMap(shared_str(level_name), zoom_in);
+}
+
+CMapManager* get_map_manager()
+{
+	return &Level().MapManager();
 }
 
 bool patrol_path_exists(LPCSTR patrol_path)
@@ -758,7 +843,7 @@ bool getCamEffectorTransformData(::luabind::object& t, LPCSTR animationFile)
 		{
 			COMotion M;
 			if (M.LoadMotion(full_path)) {
-				std::map<EChannelType, std::string> mapOrder;
+				xr_map<EChannelType, xr_string> mapOrder;
 				mapOrder[EChannelType::ctPositionX] = "positionX";
 				mapOrder[EChannelType::ctPositionY] = "positionY";
 				mapOrder[EChannelType::ctPositionZ] = "positionZ";
@@ -811,7 +896,7 @@ void set_cam_position_direction(Fvector& position, Fvector& direction, unsigned 
 	actor->initFPCam();
 	actor->m_FPCam->m_HPB.set(direction);
 	actor->m_FPCam->m_Position.set(position);
-	actor->m_FPCam->m_customSmoothing = smoothing;
+	actor->m_FPCam->m_customSmoothing = _max(1, smoothing);
 	actor->m_FPCam->hudEnabled = hudEnabled;
 	actor->m_FPCam->SetHudAffect(hudAffect);
 }
@@ -1040,9 +1125,14 @@ void refresh_npc_names()
 			if (g_pGameLevel)
 			{
 				CObject* obj = g_pGameLevel->Objects.net_Find(it->first);
-				CInventoryOwner* owner = smart_cast<CInventoryOwner*>(obj);
-				if (owner)
-					owner->refresh_npc_name();
+				if (obj)
+				{
+					CInventoryOwner* owner = smart_cast<CInventoryOwner*>(obj);
+					if (owner)
+					{
+						owner->refresh_npc_name();
+					}
+				}
 			}
 		}
 	}
@@ -1087,6 +1177,19 @@ u32 vertex_id(Fvector position)
 	return (ai().level_graph().vertex_id(position));
 }
 
+::luabind::object get_nearby_vertices(const Fvector &pos, float radius)
+{
+	xr_vector<CLevelGraph::CVertex *> nearby_vertices;
+	nearby_vertices.clear();
+	ai().level_graph().nearby_vertices(pos, radius, nearby_vertices);
+	::luabind::object lua_table = ::luabind::newtable(ai().script_engine().lua());
+	for (auto &I : nearby_vertices)
+	{
+		lua_table[ai().level_graph().vertex_id(I)] = true;
+	}
+	return lua_table;
+}
+
 u32 render_get_dx_level()
 {
 	return ::Render->get_dx_level();
@@ -1115,9 +1218,26 @@ void stop_tutorial()
 		g_tutorial->Stop();
 }
 
+LPCSTR tutorial_name()
+{
+	if (g_tutorial)
+		return g_tutorial->m_name;
+	return "invalid";
+}
+
 LPCSTR translate_string(LPCSTR str)
 {
 	return *CStringTable().translate(str);
+}
+
+void patrol_path_add(LPCSTR patrol_path, CPatrolPath* path)
+{
+	ai().patrol_paths_raw().add_path(shared_str(patrol_path), path);
+}
+
+void patrol_path_remove(LPCSTR patrol_path)
+{
+	ai().patrol_paths_raw().remove_path(shared_str(patrol_path));
 }
 
 bool has_active_tutotial()
@@ -1509,9 +1629,21 @@ bool AllowHudMotion()
 	return g_player_hud->allow_script_anim();
 }
 
-void PlayBlendAnm(LPCSTR name, u8 part, float speed, float power, bool bLooped, bool no_restart)
+bool MotionExists(LPCSTR model_path, LPCSTR motion_name)
 {
-	g_player_hud->PlayBlendAnm(name, part, speed, power, bLooped, no_restart);
+	::Render->hud_loading = true;
+	IRenderVisual* vis = ::Render->model_Create(model_path);
+	::Render->hud_loading = false;
+	if (!vis) return false;
+	IKinematicsAnimated* ka = smart_cast<IKinematicsAnimated*>(vis);
+	bool found = ka && ka->ID_Cycle_Safe(motion_name).valid();
+	::Render->model_Delete(vis);
+	return found;
+}
+
+void PlayBlendAnm(LPCSTR name, u8 part, float speed, float power, bool bLooped, bool no_restart, LPCSTR pivot_bone)
+{
+	g_player_hud->PlayBlendAnm(name, part, speed, power, bLooped, no_restart, pivot_bone);
 }
 
 void StopBlendAnm(LPCSTR name, bool bForce)
@@ -1617,7 +1749,7 @@ void AddBullet(::luabind::object t)
 	}
 }
 
-const Fvector2 world2ui(Fvector pos, bool hud = false, bool allow_offscreen = false)
+const Fvector3 world2ui_with_depth(Fvector pos, bool hud = false, bool allow_offscreen = false)
 {
 	Fmatrix world, res;
 	world.identity();
@@ -1627,7 +1759,7 @@ const Fvector2 world2ui(Fvector pos, bool hud = false, bool allow_offscreen = fa
 		res.mul(Device.mFullTransformHud, world);
 	else
 		res.mul(Device.mFullTransform, world);
-	
+
 	Fvector4 v_res;
 
 	v_res.w = res._44;
@@ -1650,7 +1782,15 @@ const Fvector2 world2ui(Fvector pos, bool hud = false, bool allow_offscreen = fa
 	x /= width_fk;
 	y /= height_fk;
 
-	return { x,y };
+	float depth = v_res.w < 0 ? -1 : 1;
+
+	return {x, y, depth};
+}
+
+const Fvector2 world2ui(Fvector pos, bool hud = false, bool allow_offscreen = false)
+{
+	Fvector3 res = world2ui_with_depth(pos, hud, allow_offscreen);
+	return {res.x, res.y};
 }
 
 // demonized: unproject ui coordinates (ie mouse cursor coordinates) to world coordinates
@@ -2196,6 +2336,16 @@ void update_pda_news_from_uiwindow(CUIWindow* CUIWindowPItem) {
 	}
 }
 
+float GetActorAlcohol()
+{
+    if (Actor())
+    {
+        return Actor()->conditions().GetAlcohol();
+    }
+
+    return 0.0f;
+}
+
 script_attachment* AddAttachment(LPCSTR name, LPCSTR model_name)
 {
 	script_attachment* att = xr_new<script_attachment>(name, model_name);
@@ -2223,6 +2373,13 @@ void IterateAttachments(::luabind::functor<bool> functor)
 {
 	Level().iterate_attachments(functor);
 }
+
+// Antglobes: Export Screenshot Func + variable resolution & encoding
+void take_screenshot(LPCSTR path, Fvector2 dimensions, IRender_interface::DxEncoding dx_encoding)
+{
+	Render->TakeScreenshot(path, dimensions, dx_encoding);
+}
+
 
 #pragma optimize("s",on)
 
@@ -2288,6 +2445,18 @@ void CLevel::script_register(lua_State* L)
 					value("Device", int(ETraceTarget::TT_DEVICE))
 				]
 		];
+	// Antglobes: DirectX Encodings (Parsed as DX10/11 equivalent if renderer 3+ used)
+	module(L)
+		[
+			class_<enum_exporter<IRender_interface::DxEncoding>>("DxEncoding")
+				.enum_("DxEncoding")
+				[
+					value("A8R8G8B8", int(IRender_interface::eDXE_A8R8G8B8)),
+					value("DXT1", int(IRender_interface::eDXE_DXT1)),
+					value("DXT5", int(IRender_interface::eDXE_DXT5)),
+					value("BC7", int(IRender_interface::eDXE_BC7))
+				]
+		];
 
 	module(L, "level")
 		[
@@ -2315,6 +2484,9 @@ void CLevel::script_register(lua_State* L)
 			def("get_sun_intensity", ((float (*)()) & get_sun_intensity)),
 			// antglobes: Check if the weather is clear
 			def("is_sun_visible", ((bool (*)()) & is_sun_visible)),
+			// Antglobes: Export Screenshot Func + variable resolution & encoding
+			def("take_screenshot", ((void (*)(LPCSTR, Ivector2, IRender_interface::DxEncoding)) &take_screenshot)),
+			// def("add_cam_effector", ((float (*)(LPCSTR, int, bool, LPCSTR))&add_cam_effector)),
 
 			// demonized: get result of crosshair ray query
 			def("get_target_result", ((script_rq_result(*)()) & g_get_target_result)),
@@ -2347,6 +2519,10 @@ void CLevel::script_register(lua_State* L)
 			def("get_wfx_time", get_wfx_time),
 			def("stop_weather_fx", stop_weather_fx),
 
+            def("get_weather_weight", get_weather_weight),
+            def("set_weather_weight", set_weather_weight),
+            def("set_weather_smooth", set_weather_smooth),
+
 			def("environment", environment),
 
 			def("set_time_factor", set_time_factor),
@@ -2360,6 +2536,8 @@ void CLevel::script_register(lua_State* L)
 			def("get_time_minutes", get_time_minutes),
 			def("change_game_time", change_game_time),
 
+			def("get_nearby_covers", get_nearby_covers),
+			def("vertex_link", vertex_link),
 			def("high_cover_in_direction", high_cover_in_direction),
 			def("low_cover_in_direction", low_cover_in_direction),
 			def("vertex_in_direction", vertex_in_direction),
@@ -2379,12 +2557,16 @@ void CLevel::script_register(lua_State* L)
 			def("map_remove_object_spot", map_remove_object_spot),
 			def("map_has_object_spot", map_has_object_spot),
 			def("map_change_spot_hint", map_change_spot_hint),
+			def("map_manager", get_map_manager),
 
 			// demonized: remove all map object spots by id
 			def("map_remove_all_object_spots", map_remove_all_object_spots),
 			def("map_get_object_spot_static", map_get_spot_static),
 			def("map_get_object_minimap_spot_static", map_get_minimap_spot_static),
 			def("map_get_object_spots_by_id", map_get_object_spots_by_id),
+
+			def("map_pan_to", &map_pan_to),
+			def("map_pan_to_level", &map_pan_to_level),
 
 			def("add_dialog_to_render", add_dialog_to_render),
 			def("remove_dialog_to_render", remove_dialog_to_render),
@@ -2444,6 +2626,7 @@ void CLevel::script_register(lua_State* L)
 			def("remove_complex_effector", &remove_complex_effector),
 
 			def("vertex_id", &vertex_id),
+			def("get_nearby_vertices", &get_nearby_vertices),
 
 			def("game_id", &GameID),
 			def("ray_pick", &ray_pick),
@@ -2464,7 +2647,10 @@ void CLevel::script_register(lua_State* L)
 			def("get_attachment", &GetAttachment),
 			def("remove_attachment", (void (*)(LPCSTR)) &RemoveAttachment),
 			def("remove_attachment", (void (*)(script_attachment*)) &RemoveAttachment),
-			def("iterate_attachments", &IterateAttachments)
+			def("iterate_attachments", &IterateAttachments),
+
+			def("patrol_path_add", &patrol_path_add),
+			def("patrol_path_remove", &patrol_path_remove)
 		],
 
 		module(L, "actor_stats")
@@ -2487,7 +2673,8 @@ void CLevel::script_register(lua_State* L)
 		.def("get_result", &CRayPick::get_result)
 		.def("get_object", &CRayPick::get_object)
 		.def("get_distance", &CRayPick::get_distance)
-		.def("get_element", &CRayPick::get_element),
+		.def("get_element", &CRayPick::get_element)
+		.def("get_normal", &CRayPick::get_normal),
 		class_<script_rq_result>("rq_result")
 		.def_readonly("object", &script_rq_result::O)
 		.def_readonly("range", &script_rq_result::range)
@@ -2612,6 +2799,7 @@ void CLevel::script_register(lua_State* L)
 		def("start_tutorial", &start_tutorial),
 		def("stop_tutorial", &stop_tutorial),
 		def("has_active_tutorial", &has_active_tutotial),
+		def("active_tutorial_name", &tutorial_name),
 		def("translate_string", &translate_string),
 		def("reload_language", &reload_language),
 		def("get_resolutions", &vid_modes_string),
@@ -2619,6 +2807,7 @@ void CLevel::script_register(lua_State* L)
 		def("stop_hud_motion", StopHudMotion),
 		def("get_motion_length", MotionLength),
 		def("hud_motion_allowed", AllowHudMotion),
+		def("motion_exists", MotionExists),
 		def("play_hud_anm", PlayBlendAnm),
 		def("stop_hud_anm", StopBlendAnm),
 		def("stop_all_hud_anms", StopAllBlendAnms),
@@ -2634,6 +2823,7 @@ void CLevel::script_register(lua_State* L)
 		def("prefetch_model", prefetch_model),
 		def("get_visual_userdata", GetVisualUserdata),
 		def("world2ui", world2ui),
+		def("world2ui_with_depth", world2ui_with_depth),
 		def("ui2world", (void (*)(Fvector2, Fvector&, u16&))&ui2world, pure_out_value<2>() + pure_out_value<3>()),
 		def("ui2world", (void (*)(Fvector&, Fvector&, u16&))&ui2world, pure_out_value<2>() + pure_out_value<3>()),
 		def("ui2world_offscreen", (void (*)(Fvector2, Fvector&, u16&))& ui2world_offscreen, pure_out_value<2>() + pure_out_value<3>()),
@@ -2641,6 +2831,8 @@ void CLevel::script_register(lua_State* L)
 		
 		// demonized: adjust game news time
 		def("change_game_news_show_time", &change_game_news_show_time),
-		def("update_pda_news_from_uiwindow", &update_pda_news_from_uiwindow)
+		def("update_pda_news_from_uiwindow", &update_pda_news_from_uiwindow),
+
+        def("get_actor_alcohol", &GetActorAlcohol)
 	];
 }

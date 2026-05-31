@@ -182,7 +182,7 @@ public:
 
 	virtual char* get_monster_class_name() { return "bloodsucker"; }
 
-	virtual void renderable_Render();
+	virtual void renderable_Render(IDSGraphManager* DM);
 
 #ifdef DEBUG
 	virtual CBaseMonster::SDebugInfo show_debug_info();
@@ -245,7 +245,3 @@ public:
 
 DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-add_to_type_list(CAI_Bloodsucker)
-#undef script_type_list
-#define script_type_list save_type_list(CAI_Bloodsucker)

@@ -1,5 +1,3 @@
-#ifndef PhysicsShellH
-#define PhysicsShellH
 #pragma once
 
 #include "PHDefs.h"
@@ -147,6 +145,8 @@ class XRPHYSICS_API CPhysicsElement :
 {
 public:
 	u16 m_SelfID;
+    float m_fScale;
+    virtual void SetScale(float scale) = 0;
 	virtual CPhysicsShell* PhysicsShell() = 0;
 	virtual void set_ContactCallback(ContactCallbackFun* callback) = 0;
 	virtual IPhysicsShellHolder* PhysicsRefObject() = 0;
@@ -207,10 +207,6 @@ public:
 	};
 	//	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
-
-//add_to_type_list(CPhysicsElement)
-//#undef script_type_list
-//#define script_type_list save_type_list(CPhysicsElement)
 
 
 XRPHYSICS_API float NonElasticCollisionEnergy(CPhysicsElement* e1, CPhysicsElement* e2, const Fvector& norm);
@@ -314,9 +310,6 @@ public:
 	//	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
 
-//add_to_type_list(CPhysicsJoint)
-//#undef script_type_list
-//#define script_type_list save_type_list(CPhysicsJoint)
 // ABSTRACT: 
 class CPHIsland;
 class CPhysicsShellAnimator;
@@ -360,7 +353,7 @@ public:
 	virtual void CreateShellAnimator(CInifile const* ini, LPCSTR section) = 0;
 	virtual void SetIgnoreAnimated() = 0;
 	//	virtual			bool						Animated									()																							= 0;
-	virtual void AnimatorOnFrame() = 0;
+	virtual void AnimatorOnFrame(bool calculate_bones = true) = 0;
 	virtual void SetSmall() = 0;
 	virtual void SetIgnoreSmall() = 0;
 	virtual bool isFractured() = 0;
@@ -447,10 +440,6 @@ public:
 	//	DECLARE_SCRIPT_REGISTER_FUNCTION
 };
 
-//add_to_type_list(CPhysicsShell)
-//#undef script_type_list
-//#define script_type_list save_type_list(CPhysicsShell)
-
 struct dContact;
 struct SGameMtl;
 XRPHYSICS_API void StaticEnvironmentCB(bool& do_colide, bool bo1, dContact& c, SGameMtl* material_1,
@@ -490,4 +479,3 @@ XRPHYSICS_API void phys_shell_verify_object_model(IPhysicsShellHolder& O);
 
 
 void phys_shell_verify_model(IKinematics& K);
-#endif // PhysicsShellH

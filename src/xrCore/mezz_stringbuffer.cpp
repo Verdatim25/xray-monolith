@@ -100,6 +100,10 @@ void trim(std::string& s, const char* t) {
 	s.erase(s.find_last_not_of(t) + 1);
 	s.erase(0, s.find_first_not_of(t));
 };
+void trim(xr_string& s, const char* t) {
+	s.erase(s.find_last_not_of(t) + 1);
+	s.erase(0, s.find_first_not_of(t));
+};
 std::string trimCopy(std::string s, const char* t) {
 	trim(s, t);
 	return s;
@@ -111,6 +115,16 @@ void toLowerCase(std::string& s) {
 	});
 }
 std::string toLowerCaseCopy(std::string s) {
+	toLowerCase(s);
+	return s;
+}
+
+void toLowerCase(xr_string& s) {
+	std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) {
+		return std::tolower(c);
+		});
+}
+xr_string toLowerCaseCopy(xr_string s) {
 	toLowerCase(s);
 	return s;
 }

@@ -8,6 +8,9 @@
 #include "PHSkeleton.h"
 #include "../xrphysics/PHUpdateObject.h"
 #include "PhysicsSkeletonObject.h"
+
+#include "player_hud.h"
+#include "script_attachment_manager.h"
 #endif
 
 #include "holder_custom.h"
@@ -20,6 +23,8 @@ class CCameraBase;
 #define DESIRED_DIR 1
 
 #ifdef STATIONARYMGUN_NEW
+#define STM_SHOT_EFFECTOR 0x53564D /* STM ~ 53 56 4D */
+
 class CActor;
 class CInventoryOwner;
 class CInventory;
@@ -47,7 +52,7 @@ struct SStmBarrel
 
 	shared_str m_sShellParticles;
 	shared_str m_sFlameParticles;
-	CParticlesObject *m_pFlameParticles;
+	intrusive_ptr<CParticlesObject> m_pFlameParticles;
 	shared_str m_sSmokeParticles;
 
 	Fcolor light_base_color;
@@ -130,6 +135,8 @@ private:
 	//casts
 public:
 	virtual CHolderCustom* cast_holder_custom() { return this; }
+	virtual CGameObject* cast_game_object() { return this; }
+	virtual CWeaponStatMgun* cast_weapon_stat_mgun() { return this; }
 
 	//general
 public:
@@ -171,7 +178,7 @@ private:
 	float m_overheat_decr_quant;
 	float m_overheat_threshold;
 	shared_str m_overheat_particles;
-	CParticlesObject* p_overheat;
+	intrusive_ptr<CParticlesObject> p_overheat;
 protected:
 	void UpdateBarrelDir();
 	virtual const Fvector& get_CurrentFirePoint();
@@ -205,7 +212,7 @@ public:
 #endif
 	virtual void cam_Update(float dt, float fov = 90.0f);
 
-	virtual void renderable_Render();
+	virtual void renderable_Render(IDSGraphManager* DM);
 
 	virtual bool attach_Actor(CGameObject* actor);
 	virtual void detach_Actor();
@@ -259,6 +266,7 @@ private:
 
 	float fireDispersionOwnerScale;
 	LPCSTR m_on_before_use_callback;
+    shared_str m_on_range_fov_callback;
 
 	void CreateSkeleton(CSE_Abstract *po);
 	virtual void PhDataUpdate(float step) {};
@@ -314,6 +322,8 @@ public:
 	LPCSTR GetAnimation(int id) { return m_animation.GetAnimation(id); }
 	void SetAnimation(int id, LPCSTR anim) { m_animation.SetAnimation(id, anim); }
 
+    void OverrideRangeFOV(const CGameObject* npc, float& range);
+
 	/* Barrels APIs */
 	SStmBarrel *Barrel(LPCSTR name);
 	float BarrelRPM(LPCSTR name);
@@ -345,6 +355,17 @@ public:
 		void Play(u8 anim);
 		void OnAnimationEnd();
 		static void AnimationCallback(CBlend *B);
+
+		const LPCSTR m_hand_atm = "stm_hand_atm";
+		u16 m_hand_bid;
+		Fvector m_hand_pos;
+		shared_str m_hand_vis;
+		shared_str m_hand_anims[eStmAnimWeapon_size];
+
+		bool HandGetVisualName();
+		void HandCreate();
+		void HandRemove();
+		void HandPlay(u8 anim);
 
 		u16 m_magazine_hide_bid;
 		xr_vector<MotionID> m_magazine_hide_anm;
@@ -409,6 +430,8 @@ private:
 	xr_vector<u16> m_bullet_bones;
 	u16 m_bullet_count;
 	void UpdateBulletVisibility(u16 num);
+
+	shared_str m_shot_effector;
 
 public:
 	enum eState
@@ -508,9 +531,3 @@ DECLARE_SCRIPT_REGISTER_FUNCTION
 #endif
 
 };
-
-#ifdef STATIONARYMGUN_NEW
-add_to_type_list(CWeaponStatMgun)
-#undef script_type_list
-#define script_type_list save_type_list(CWeaponStatMgun)
-#endif
