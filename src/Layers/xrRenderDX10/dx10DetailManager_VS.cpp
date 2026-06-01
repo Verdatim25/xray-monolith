@@ -249,8 +249,8 @@ void CDetailManager::hw_Render_dump(const Fvector4& consts, const Fvector4& wave
 					{
 						for (int Bend = 0; Bend < BendersQty; Bend++)
 						{
-							c_prev_grass[Bend].set(GData.prev_pos[Bend]);
-							c_prev_grass[Bend + 16].set(GData.prev_dir[Bend]);
+							c_prev_grass[Bend].set(GData.prev_pos[Device.m_SecondViewport.IsSVPFrame()][Bend]);
+							c_prev_grass[Bend + 16].set(GData.prev_dir[Device.m_SecondViewport.IsSVPFrame()][Bend]);
 						}
 					}
 				}
@@ -378,6 +378,7 @@ void CDetailManager::hw_Render_dump(const Fvector4& consts, const Fvector4& wave
 					RCache.stat.r.s_details.add(dwCNT_verts);
 				}
 			}
+<<<<<<< HEAD
 			// Clean up
 			// KD: we must not clear vis on r2 since we want details shadows
 			if (ps_ssfx_grass_shadows.x <= 0)
@@ -385,6 +386,8 @@ void CDetailManager::hw_Render_dump(const Fvector4& consts, const Fvector4& wave
 				if (!psDeviceFlags2.test(rsGrassShadow) || RImplementation.PHASE_NORMAL == RImplementation.phase) // phase normal without shadows
 					vis.clear_not_free();
 			}
+=======
+>>>>>>> april26
 		}
 		vOffset += hw_BatchSize * Object.number_vertices;
 		iOffset += hw_BatchSize * Object.number_indices;

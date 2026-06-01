@@ -53,8 +53,8 @@ CHW::CHW() :
 #else
     m_move_window(true)
 #endif
-//pBaseRT(NULL),
-//pBaseZB(NULL)
+//SECRET_P_BASE_RT(NULL),
+//SECRET_P_BASE_ZB(NULL)
 {
     Device.seqAppActivate.Add(this);
     Device.seqAppDeactivate.Add(this);
@@ -717,11 +717,11 @@ void CHW::DestroyDevice()
     BSManager.ClearStateArray();
     SSManager.ClearStateArray();
 
-    _SHOW_REF("refCount:pBaseZB", pBaseZB);
-    _RELEASE(pBaseZB);
+    _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
+    _RELEASE(SECRET_P_BASE_ZB);
 
-    _SHOW_REF("refCount:pBaseRT", pBaseRT);
-    _RELEASE(pBaseRT);
+    _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
+    _RELEASE(SECRET_P_BASE_RT);
 	//#ifdef DEBUG
     //	_SHOW_REF				("refCount:dwDebugSB",dwDebugSB);
     //	_RELEASE				(dwDebugSB);
@@ -846,11 +846,11 @@ void CHW::Reset(HWND hwnd)
 #ifdef DEBUG
     //	_RELEASE			(dwDebugSB);
 #endif
-    _SHOW_REF("refCount:pBaseZB", pBaseZB);
-    _SHOW_REF("refCount:pBaseRT", pBaseRT);
+    _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
+    _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
 
-    _RELEASE(pBaseZB);
-    _RELEASE(pBaseRT);
+    _RELEASE(SECRET_P_BASE_ZB);
+    _RELEASE(SECRET_P_BASE_RT);
 
 #if defined(USE_DX11)
     UINT flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
@@ -890,8 +890,8 @@ void CHW::Reset(HWND hwnd)
 			Msg		("! ERROR: [%dx%d]: %s",DevPP.BackBufferWidth,DevPP.BackBufferHeight,Debug.error2string(_hr));
 			Sleep	(100);
         }
-        R_CHK				(pDevice->GetRenderTarget			(0,&pBaseRT));
-        R_CHK				(pDevice->GetDepthStencilSurface	(&pBaseZB));
+        R_CHK				(pDevice->GetRenderTarget			(0,&SECRET_P_BASE_RT));
+        R_CHK				(pDevice->GetDepthStencilSurface	(&SECRET_P_BASE_ZB));
     */
 
 
@@ -906,8 +906,8 @@ void CHW::Reset(HWND hwnd)
 #ifdef DEBUG
 _RELEASE			(dwDebugSB);
 #endif
-_RELEASE			(pBaseZB);
-_RELEASE			(pBaseRT);
+_RELEASE			(SECRET_P_BASE_ZB);
+_RELEASE			(SECRET_P_BASE_RT);
 
 BOOL	bWindowed		= !psDeviceFlags.is	(rsFullscreen);
 #else
@@ -929,8 +929,8 @@ while	(TRUE)	{
 	Msg		("! ERROR: [%dx%d]: %s",DevPP.BackBufferWidth,DevPP.BackBufferHeight,Debug.error2string(_hr));
 	Sleep	(100);
 }
-R_CHK				(pDevice->GetRenderTarget			(0,&pBaseRT));
-R_CHK				(pDevice->GetDepthStencilSurface	(&pBaseZB));
+R_CHK				(pDevice->GetRenderTarget			(0,&SECRET_P_BASE_RT));
+R_CHK				(pDevice->GetDepthStencilSurface	(&SECRET_P_BASE_ZB));
 #ifdef DEBUG
 R_CHK				(pDevice->CreateStateBlock			(D3DSBT_ALL,&dwDebugSB));
 #endif
@@ -1092,12 +1092,18 @@ void CHW::OnAppActivate()
         m_pSwapChain->SetFullscreenState(TRUE, m_pOutput);
 
 #ifdef USE_DX11
+<<<<<<< HEAD
         if (!Core.ParamsData.test(ECoreParams::dxgi_old)) {
             _SHOW_REF("refCount:pBaseZB", pBaseZB);
             _RELEASE(pBaseZB);
+=======
+        if (!strstr(Core.Params, dxgiOld)) {
+            _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
+            _RELEASE(SECRET_P_BASE_ZB);
+>>>>>>> april26
 
-            _SHOW_REF("refCount:pBaseRT", pBaseRT);
-            _RELEASE(pBaseRT);
+            _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
+            _RELEASE(SECRET_P_BASE_RT);
         }
 
         const auto& cd = m_ChainDesc;
@@ -1138,12 +1144,18 @@ void CHW::OnAppDeactivate()
         m_pSwapChain->SetFullscreenState(FALSE, NULL);
 
 #ifdef USE_DX11
+<<<<<<< HEAD
         if (!Core.ParamsData.test(ECoreParams::dxgi_old)) {
             _SHOW_REF("refCount:pBaseZB", pBaseZB);
             _RELEASE(pBaseZB);
+=======
+        if (!strstr(Core.Params, dxgiOld)) {
+            _SHOW_REF("refCount:SECRET_P_BASE_ZB", SECRET_P_BASE_ZB);
+            _RELEASE(SECRET_P_BASE_ZB);
+>>>>>>> april26
 
-            _SHOW_REF("refCount:pBaseRT", pBaseRT);
-            _RELEASE(pBaseRT);
+            _SHOW_REF("refCount:SECRET_P_BASE_RT", SECRET_P_BASE_RT);
+            _RELEASE(SECRET_P_BASE_RT);
         }
 
         const auto& cd = m_ChainDesc;
@@ -1463,18 +1475,19 @@ void CHW::UpdateViews()
 	HRESULT R;
 
     // Create a render target view
-	//R_CHK	(pDevice->GetRenderTarget			(0,&pBaseRT));
+	//R_CHK	(pDevice->GetRenderTarget			(0,&SECRET_P_BASE_RT));
     ID3DTexture2D* pBuffer;
 	R = m_pSwapChain->GetBuffer(0, __uuidof( ID3DTexture2D), (LPVOID*)&pBuffer);
     R_CHK(R);
 
-    R = pDevice->CreateRenderTargetView(pBuffer, NULL, &pBaseRT);
+    R = pDevice->CreateRenderTargetView(pBuffer, NULL, &SECRET_P_BASE_RT);
+    pBaseRT = SECRET_P_BASE_RT;
     pBuffer->Release();
     R_CHK(R);
 
     //	Create Depth/stencil buffer
     //	HACK: DX10: hard depth buffer format
-	//R_CHK	(pDevice->GetDepthStencilSurface	(&pBaseZB));
+	//R_CHK	(pDevice->GetDepthStencilSurface	(&SECRET_P_BASE_ZB));
 	ID3DTexture2D* pDepthStencil = NULL;
 
     D3D_TEXTURE2D_DESC descDepth;
@@ -1503,7 +1516,8 @@ void CHW::UpdateViews()
     R_CHK(R);
 
     //	Create Depth/stencil view
-    R = pDevice->CreateDepthStencilView(pDepthStencil, NULL, &pBaseZB);
+    R = pDevice->CreateDepthStencilView(pDepthStencil, NULL, &SECRET_P_BASE_ZB);
+    pBaseZB = SECRET_P_BASE_ZB;
     R_CHK(R);
 
     pDepthStencil->Release();

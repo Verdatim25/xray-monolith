@@ -4,6 +4,8 @@
 
 #include "StateManager/dx10StateManager.h"
 #include "StateManager/dx10ShaderResourceStateCache.h"
+#include "R_Backend.h"
+#include "../xrRender/xrRender_console.h"
 
 #include "../../xrCore/profiler.h"
 
@@ -286,7 +288,7 @@ IC void CBackend::Render(D3DPRIMITIVETYPE T, u32 baseV, u32 startV, u32 countV, 
 	//VERIFY(vs);
 	//HW.pDevice->VSSetShader(vs);
 	//HW.pDevice->GSSetShader(0);
-
+	
 	D3D_PRIMITIVE_TOPOLOGY Topology = TranslateTopology(T);
 	u32 iIndexCount = GetIndexCount(T, PC);
 

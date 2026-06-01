@@ -204,7 +204,7 @@ void CRenderTarget::phase_ssfx_ssr()
 
 
 	// GLOSS /////////////////////////////////////////////////////////////////
-	u_setrt(rt_ssfx_temp3, 0, 0, HW.pBaseZB);
+	u_setrt(rt_ssfx_temp3, 0, 0, baseZB);
 	RCache.set_CullMode(CULL_NONE);
 	RCache.set_Stencil(FALSE);
 
@@ -229,7 +229,7 @@ void CRenderTarget::phase_ssfx_ssr()
 	float scale_Y = h / ScaleFactor;
 
 	// SSR ///////////////////////////////////////////////////////////
-	u_setrt(rt_ssfx, 0, 0, HW.pBaseZB);
+	u_setrt(rt_ssfx, 0, 0, baseZB);
 	RCache.set_CullMode(CULL_NONE);
 	RCache.set_Stencil(FALSE);
 
@@ -246,8 +246,8 @@ void CRenderTarget::phase_ssfx_ssr()
 
 	//Set pass
 	RCache.set_Element(s_ssfx_ssr->E[0]);
-	RCache.set_c("m_current", Matrix_current);
-	RCache.set_c("m_previous", Matrix_previous);
+	RCache.set_c("m_current", GetPrevious()->Matrix_current);
+	RCache.set_c("m_previous", GetPrevious()->Matrix_previous);
 	RCache.set_c("cam_pos", ::Random.randF(-1.0, 1.0), ::Random.randF(-1.0, 1.0), 0.0f, 0.0f);
 
 	RCache.set_c("ssr_setup", ps_ssfx_ssr);
@@ -261,7 +261,7 @@ void CRenderTarget::phase_ssfx_ssr()
 	//if (ps_ssfx_ssr.y > 0 || ps_ssfx_ssr.x > 1.0)
 	{
 		// BLUR PHASE 1 //////////////////////////////////////////////////////////
-		u_setrt(rt_ssfx_temp, 0, 0, HW.pBaseZB);
+		u_setrt(rt_ssfx_temp, 0, 0, baseZB);
 		RCache.set_CullMode(CULL_NONE);
 		RCache.set_Stencil(FALSE);
 
@@ -282,7 +282,7 @@ void CRenderTarget::phase_ssfx_ssr()
 
 
 		// BLUR PHASE 2 //////////////////////////////////////////////////////////
-		u_setrt(rt_ssfx_temp2, 0, 0, HW.pBaseZB);
+		u_setrt(rt_ssfx_temp2, 0, 0, baseZB);
 		RCache.set_CullMode(CULL_NONE);
 		RCache.set_Stencil(FALSE);
 
@@ -542,6 +542,7 @@ void CRenderTarget::phase_ssfx_water_waves()
 
 void CRenderTarget::phase_ssfx_sss()
 {
+	PIX_EVENT(SSFX_SSS);
 	//Constants
 	u32 Offset = 0;
 	u32 C = color_rgba(255, 255, 255, 255);
@@ -555,6 +556,9 @@ void CRenderTarget::phase_ssfx_sss()
 	p0.set(0.0f, 0.0f);
 	p1.set(1.0f, 1.0f);
 
+	// Buffer must be cleared for svp scissor hack
+	FLOAT ColorRGBA[4] = { 1.0, 1.0, 1.0, 1.0 };
+	HW.pContext->ClearRenderTargetView(rt_ssfx->pRT, ColorRGBA);
 	u_setrt(rt_ssfx, nullptr, nullptr, nullptr);
 
 	RCache.set_CullMode(CULL_NONE);
@@ -571,8 +575,8 @@ void CRenderTarget::phase_ssfx_sss()
 	// Draw COLOR
 	RCache.set_Element(s_ssfx_sss->E[0]);
 
-	RCache.set_c("m_current", Matrix_current);
-	RCache.set_c("m_previous", Matrix_previous);
+	RCache.set_c("m_current", GetPrevious()->Matrix_current);
+	RCache.set_c("m_previous", GetPrevious()->Matrix_previous);
 	RCache.set_c("ssfx_sss", ps_ssfx_sss);
 
 	RCache.set_Geometry(g_combine);
@@ -631,6 +635,7 @@ void CRenderTarget::phase_ssfx_sss()
 
 void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 {
+	PIX_EVENT(SSFX_SSS_EXT);
 	static shared_str strLights("lights_data");
 	static light* LightSlot[8];
 	static u32 sss_currentframe;
@@ -659,6 +664,9 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 	p0.set(0.0f, 0.0f);
 	p1.set(1.0f, 1.0f);
 
+	// Buffer must be cleared for svp scissor hack
+	FLOAT ColorRGBA[4] = { 1.0, 1.0, 1.0, 1.0 };
+	HW.pContext->ClearRenderTargetView(rt_ssfx_sss_tmp->pRT, ColorRGBA);
 	u_setrt(rt_ssfx_sss_tmp, nullptr, nullptr, nullptr);
 
 	RCache.set_CullMode(CULL_NONE);
@@ -675,8 +683,8 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 	// Draw COLOR
 	RCache.set_Element(s_ssfx_sss_ext->E[0]);
 
-	RCache.set_c("m_current", Matrix_current);
-	RCache.set_c("m_previous", Matrix_previous);
+	RCache.set_c("m_current", GetPrevious()->Matrix_current);
+	RCache.set_c("m_previous", GetPrevious()->Matrix_previous);
 	RCache.set_c("ssfx_sss", ps_ssfx_sss);
 	RCache.set_c("id_offset", 0);
 
@@ -697,9 +705,10 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
         LightsSort.clear();
 		bool CheckPackage = true;
 
-		if (Device.dwFrame > sss_currentframe)
+		// Shadows must render for each viewport
+		if (Device.dwViewport > sss_currentframe)
 		{
-			sss_currentframe = Device.dwFrame + 2;
+			sss_currentframe = Device.dwViewport + 2;
 
 			xr_vector<light*>& source = LP.v_shadowed;
 
@@ -881,8 +890,8 @@ void CRenderTarget::phase_ssfx_sss_ext(light_Package& LP)
 	// Draw COLOR
 	RCache.set_Element(s_ssfx_sss_ext->E[1]);
 
-	RCache.set_c("m_current", Matrix_current);
-	RCache.set_c("m_previous", Matrix_previous);
+	RCache.set_c("m_current", GetPrevious()->Matrix_current);
+	RCache.set_c("m_previous", GetPrevious()->Matrix_previous);
 	RCache.set_c("id_offset", 1);
 	RCache.get_ConstantDirect(strLights, 4 * sizeof(Fvector4) * 2, 0, 0, &LightData);
 
@@ -1012,8 +1021,8 @@ void CRenderTarget::phase_ssfx_motion_blur()
 	// Draw COLOR
 	RCache.set_Element(s_ssfx_motion_blur->E[0]);
 
-	RCache.set_c("m_current", Matrix_current);
-	RCache.set_c("m_previous", Matrix_previous);
+	RCache.set_c("m_current", GetPrevious()->Matrix_current);
+	RCache.set_c("m_previous", GetPrevious()->Matrix_previous);
 
 	RCache.set_Geometry(g_combine);
 	RCache.Render(D3DPT_TRIANGLELIST, Offset, 0, 4, 0, 2);

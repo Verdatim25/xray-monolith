@@ -279,7 +279,7 @@ public:
 	enum RRT
 	{
 		rtPDA = 1,
-		rtSVP,
+		rtSVP = 2
 	};
 
 	enum DxEncoding
@@ -298,6 +298,8 @@ public:
 	s32 m_MSAASample;
 
 	BENCH_SEC_SCRAMBLEMEMBER1
+
+	BOOL bSUN;
 
 	// data
 	CFrustum ViewBase;

@@ -109,6 +109,15 @@ void CRender::level_Load(IReader* fs)
 	// End
 	pApp->LoadEnd();
 
+<<<<<<< HEAD
+=======
+	// sanity-clear
+	lstLODs.clear();
+	lstLODgroups.clear();
+	mapLOD.clear();
+	for(auto &w : mapWater) w.clear();
+
+>>>>>>> april26
 	// signal loaded
 	b_loaded = TRUE;
 }

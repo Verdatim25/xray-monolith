@@ -28,8 +28,45 @@ ICF float CalcSSA(float& distSQ, Fvector& C, float R)
 
 ICF float CalcSSA(float& distSQ, Fvector& C, dxRender_Visual* V)
 {
+<<<<<<< HEAD
     return CalcSSA(distSQ, C, V->vis.sphere.R);
 }
+=======
+	CRender& RI = RImplementation;
+	auto sh = pVisual->shader->E[0]._get();
+#if defined(USE_DX11) //  Redotix99: for 3D Shader Based Scopes 
+	if (nullptr != sh && sh->flags.iScopeLense > 0) {
+		// Only want a single lens, if rendering the player HUD (bCaptureScopeLens)
+		if (RImplementation.Target->bCaptureScopeLens) {
+			if (sh->flags.iScopeLense == 3 && mapScopeHUDSorted.empty()) {
+				// We must detect the lens surface immediately, ignoring all culling.
+				float distSQ;
+				float SSA = CalcSSA(distSQ, Center, pVisual);
+				mapSorted_Node N;
+				N.val.ssa = 0;
+				N.val.pObject = RI.val_pObject;
+				N.val.pVisual = pVisual;
+				N.val.Matrix = *RI.val_pTransform;
+			
+				mapScopeHUDSorted.push_back(N);
+			}
+			else if (sh->flags.iScopeLense == 10) {
+				float distSQ;
+				float SSA = CalcSSA(distSQ, Center, pVisual);
+				mapSorted_Node N;
+				N.val.ssa = 0;
+				N.val.pObject = RI.val_pObject;
+				N.val.pVisual = pVisual;
+				N.val.Matrix = *RI.val_pTransform;
+				N.val.se = sh;
+			
+				mapReflexHUDSorted.push_back(N);
+			}
+		}
+		return;
+	}
+#endif
+>>>>>>> april26
 
 void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix* xform)
 {
@@ -78,6 +115,7 @@ void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix
 	}
 
 	// Select shader
+<<<<<<< HEAD
 	ShaderElement* sh = RImplementation.rimp_select_sh_dynamic(pVisual, distSQ);
 
 	if (0==sh)
@@ -85,10 +123,16 @@ void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix
 	u32 shader_priority = sh->flags.iPriority/2;
 	if (!i_mask[shader_priority])
 		return;
+=======
+	sh = RImplementation.rimp_select_sh_dynamic(pVisual, distSQ);
+	if (0 == sh) return;
+	if (!pmask[sh->flags.iPriority / 2]) return;
+>>>>>>> april26
 
 	// Create common node
 	// NOTE: Invisible elements exist only in R1
 
+<<<<<<< HEAD
 #if defined(USE_DX11) //  Redotix99: for 3D Shader Based Scopes 		
 	switch (sh->flags.iScopeLense) {	
 		case 0:
@@ -121,6 +165,8 @@ void CDSGraphManager::r_dsgraph_insert_dynamic(dxRender_Visual *pVisual, Fmatrix
 		}
 	}
 #endif
+=======
+>>>>>>> april26
 	// HUD rendering
 	if (i_mask[CDSGraphManager::fl_hud])
 	{
@@ -315,7 +361,16 @@ void CDSGraphManager::r_dsgraph_insert_static(dxRender_Visual *pVisual)
 #if RENDER==R_R4
 	if (sh->flags.isWater && RImplementation.o.ssfx_water)
 	{
+<<<<<<< HEAD
 		RGraph.mapWater.emplace_back(distSQ, SSA, nullptr, pVisual, &Fidentity, sh, false);
+=======
+		mapWater_Node* N = mapWater[Device.m_SecondViewport.IsSVPFrame()].insertInAnyWay(distSQ);
+		N->val.ssa = SSA;
+		N->val.pObject = NULL;
+		N->val.pVisual = pVisual;
+		N->val.Matrix = Fidentity;
+		N->val.se = sh;
+>>>>>>> april26
 		return;
 	}
 #endif

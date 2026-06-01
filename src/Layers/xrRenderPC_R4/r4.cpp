@@ -17,6 +17,7 @@
 #include "../../xrCore/profiler.h"
 
 #include "D3DX10Core.h"
+#include "../xrRender/SkeletonX.h"
 
 CRender RImplementation;
 
@@ -346,11 +347,20 @@ void CRender::create()
 		Msg("* Managed textures enabled");
 
 	// options (smap-pool-size)
+<<<<<<< HEAD
 	if (Core.ParamsData.test(ECoreParams::smap1536)) o.smapsize = 1536;
 	if (Core.ParamsData.test(ECoreParams::smap2048)) o.smapsize = 2048;
 	if (Core.ParamsData.test(ECoreParams::smap2560)) o.smapsize = 2560;
 	if (Core.ParamsData.test(ECoreParams::smap3072)) o.smapsize = 3072;
 	if (Core.ParamsData.test(ECoreParams::smap4096)) o.smapsize = 4096;
+=======
+	if (strstr(Core.Params, "-smap1536")) o.smapsize = 1536;
+	if (strstr(Core.Params, "-smap2048")) o.smapsize = 2048;
+	if (strstr(Core.Params, "-smap2560")) o.smapsize = 2560;
+	if (strstr(Core.Params, "-smap3072")) o.smapsize = 3072;
+	if (strstr(Core.Params, "-smap4096")) o.smapsize = 4096;
+	if (strstr(Core.Params, "-smap8192")) o.smapsize = 8192;
+>>>>>>> april26
 
 	// gloss
 	char* g = strstr(Core.Params, "-gloss ");
@@ -399,9 +409,8 @@ void CRender::create()
 	// HDR10
 	o.dx11_hdr10 = !!ps_r4_hdr10_on;
 
-	//	MSAA option dependencies
-	o.dx10_msaa = ps_r3_msaa && !o.dx11_hdr10;
-	o.dx10_msaa_samples = o.dx11_hdr10 ? 1 : (1 << ps_r3_msaa);
+	o.dx10_msaa = 0; 
+	o.dx10_msaa_samples = 1;
 
 	o.dx10_msaa_opt = ps_r2_ls_flags.test(R3FLAG_MSAA_OPT);
 	o.dx10_msaa_opt = o.dx10_msaa_opt && o.dx10_msaa && (HW.FeatureLevel >= D3D_FEATURE_LEVEL_10_1)
@@ -528,8 +537,8 @@ void CRender::create()
 
 	m_bMakeAsyncSS = false;
 
-	Target = xr_new<CRenderTarget>(); // Main target
-
+	initializeTargets();
+	
 	Models = xr_new<CModelPool>();
 	PSLibrary.OnCreate();
 	HWOCC.occq_create(occq_size);
@@ -550,12 +559,31 @@ void CRender::destroy()
 	FluidManager.Destroy();
 	GMBase.destroy();
 
+	deleteTargets();
 	HWOCC.occq_destroy();
 	xr_delete(Models);
-	xr_delete(Target);
 	PSLibrary.OnDestroy();
 	Device.seqFrame.Remove(this);
+<<<<<<< HEAD
 	Device.ModelDefferClear = nullptr;
+=======
+	r_dsgraph_destroy();
+
+}
+
+void CRender::initializeTargets()
+{
+	TargetMain = xr_new<CRenderTarget>("main", Device.dwWidth, Device.dwHeight);
+	TargetSVP = xr_new<CRenderTarget>("svp", Device.svp_width(), Device.svp_height());
+	TargetMain->SetActive();
+}
+
+void CRender::deleteTargets()
+{
+	Target = nullptr;
+	xr_delete(TargetMain);
+	xr_delete(TargetSVP);
+>>>>>>> april26
 }
 
 void CRender::reset_begin()
@@ -569,7 +597,7 @@ void CRender::reset_begin()
 	}
 	//-AVO
 
-	xr_delete(Target);
+	deleteTargets();
 	HWOCC.occq_destroy();
 }
 
@@ -577,7 +605,7 @@ void CRender::reset_end()
 {
 	HWOCC.occq_create(occq_size);
 
-	Target = xr_new<CRenderTarget>();
+	initializeTargets();
 
 	//AVO: let's reload details while changed details options on vid_restart
 	if (b_loaded && ((dm_current_size != dm_size) || (ps_r__Detail_density != ps_current_detail_density) || (
@@ -883,6 +911,15 @@ CRender::CRender()
 	: m_bFirstFrameAfterReset(false)
 {
 	init_cacades();
+
+	Device.m_SecondViewport.get_bone_matrix = [](IKinematics* k, IRenderVisual* v, Fmatrix& m) -> bool {
+		auto s = dynamic_cast<CSkeletonX*>(v);
+		if (s && k) {
+			m = k->LL_GetTransform_R(s->get_RMS_boneid());
+			return true;
+		}
+		return false;
+	};
 }
 
 CRender::~CRender()

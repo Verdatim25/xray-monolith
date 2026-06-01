@@ -470,7 +470,9 @@ void CWallmarksEngine::Render()
 
 	Fmatrix mSavedView = Device.mView;
 	Fvector mViewPos;
-	mViewPos.mad(Device.vCameraPosition, Device.vCameraDirection, ps_r__WallmarkSHIFT_V);
+	Fvector vCameraPosition = Device.mInvView.c; // vCameraPosition may not be correct in SVP frame
+
+	mViewPos.mad(vCameraPosition, Device.vCameraDirection, ps_r__WallmarkSHIFT_V);
 	Device.mView.build_camera_dir(mViewPos, Device.vCameraDirection, Device.vCameraTop);
 	RCache.set_xform_view(Device.mView);
 
@@ -486,6 +488,7 @@ void CWallmarksEngine::Render()
         const float ssaCLIP = r_ssaDISCARD * r_wallmarks_ssa_k;
         xrCriticalSectionGuard g(lock); // Physics may add wallmarks in parallel with rendering
 
+<<<<<<< HEAD
         for (int i = 0; i < marks.size(); i++)
         {
             wm_slot* slot = marks[i];
@@ -493,6 +496,34 @@ void CWallmarksEngine::Render()
             bool skeleton_empty = !r_wallmarks_dynamic || slot->skeleton_items.empty();
             if (static_empty && skeleton_empty)
                 continue;
+=======
+	for (WMSlotVecIt slot_it = marks.begin(); slot_it != marks.end(); slot_it++)
+	{
+		u32 w_offset;
+		FVF::LIT *w_verts, *w_start;
+		BeginStream(hGeom, w_offset, w_verts, w_start);
+		wm_slot* slot = *slot_it;
+		// static wallmarks
+		for (StaticWMVecIt w_it = slot->static_items.begin(); w_it != slot->static_items.end();)
+		{
+			static_wallmark* W = *w_it;
+			if (RImplementation.ViewBase.testSphere_dirty(W->bounds.P, W->bounds.R))
+			{
+				Device.Statistic->RenderDUMP_WMS_Count++;
+				float dst = vCameraPosition.distance_to_sqr(W->bounds.P);
+				float ssa = W->bounds.R * W->bounds.R / dst;
+				if (ssa >= ssaCLIP)
+				{
+					u32 w_count = u32(w_verts - w_start);
+					if ((w_count + W->verts.size()) >= (MAX_TRIS * 3))
+					{
+						FlushStream(hGeom, slot->shader, w_offset, w_verts, w_start,FALSE);
+						BeginStream(hGeom, w_offset, w_verts, w_start);
+					}
+					static_wm_render(W, w_verts);
+				}
+			}
+>>>>>>> april26
 
             u32 w_offset;
             FVF::LIT* w_verts, * w_start;

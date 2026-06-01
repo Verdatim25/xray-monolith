@@ -26,32 +26,46 @@ static int facetable[6][4] = {
 	{3, 2, 4, 5}, {1, 0, 7, 6},
 };
 
-//////////////////////////////////////////////////////////////////////////
-void CRender::render_rain()
+
+bool CRender::is_raining()
 {
-	//return;
 	float fRainFactor = 0;
 	if (ps_ssfx_gloss_method == 0)
 		fRainFactor = g_pGamePersistent->Environment().CurrentEnv->rain_density;
 	else
 		fRainFactor = g_pGamePersistent->Environment().wetness_factor;
 
-	if (fRainFactor < EPS_L) return;
+	if (fRainFactor < EPS_L) return false;
 
-	PIX_EVENT(render_rain);
+	return true;
+}
 
-	D3DXMATRIX m_LightViewProj;
+
+//////////////////////////////////////////////////////////////////////////
+void CRender::shadowmap_rain()
+{
+	if (!is_raining())
+		return;
+
+		D3DXMATRIX m_LightViewProj;
 
 	//	Use light as placeholder for rain data.
+<<<<<<< HEAD
 	// нет необходимости создавать каждый кадр структуру размером почти в киллобайт на стеке.
 	light& RainLight = *Lights.rain_light;
+=======
+	auto RainLight = static_cast<light*>(Lights.rain_light._get());
+	if (!RainLight)
+		return;
+>>>>>>> april26
 
+	PIX_EVENT(RENDER_RAIN_SMAP);
 	//static const float	source_offset		= 40.f;
 
 	static const float source_offset = 10000.f;
-	RainLight.direction.set(0.0f, -1.0f, 0.0f);
-	RainLight.position.set(Device.vCameraPosition.x, Device.vCameraPosition.y + source_offset,
-	                       Device.vCameraPosition.z);
+	RainLight->direction.set(0.0f, -1.0f, 0.0f);
+	RainLight->position.set(Device.vCameraPosition.x, Device.vCameraPosition.y + source_offset,
+		Device.vCameraPosition.z);
 
 	float fBoundingSphereRadius = 0;
 
@@ -60,7 +74,7 @@ void CRender::render_rain()
 	{
 		//	
 		const float fRainFar = ps_r3_dyn_wet_surf_far;
-		ex_project.build_projection(deg2rad(Device.fFOV/* *Device.fASPECT*/), Device.fASPECT,VIEWPORT_NEAR, fRainFar);
+		ex_project.build_projection(deg2rad(Device.fFOV/* *Device.fASPECT*/), Device.fASPECT, VIEWPORT_NEAR, fRainFar);
 		ex_full.mul(ex_project, Device.mView);
 		D3DXMatrixInverse((D3DXMATRIX*)&ex_full_inverse, 0, (D3DXMATRIX*)&ex_full);
 
@@ -105,16 +119,27 @@ void CRender::render_rain()
 			}
 		}
 		//hull.compute_caster_model	(cull_planes,fuckingsun->direction);
-		hull.compute_caster_model(cull_planes, RainLight.direction);
+		hull.compute_caster_model(cull_planes, RainLight->direction);
 #ifdef	_DEBUG
+<<<<<<< HEAD
 		for (u32 it=0; it<cull_planes.size(); it++)
 			Target->dbg_addplane(cull_planes[it], 0xffffffff);
+=======
+		for (u32 it = 0; it < cull_planes.size(); it++)
+			RImplementation.Target->dbg_addplane(cull_planes[it], 0xffffffff);
+>>>>>>> april26
 #endif
 
 		// COP - 100 km away
+<<<<<<< HEAD
 		rainwet_cull_COP.mad(Device.vCameraPosition, RainLight.direction, -tweak_rain_COP_initial_offs);
 		rainwet_cull_COP.x += fBoundingSphereRadius * Device.vCameraDirection.x;
 		rainwet_cull_COP.z += fBoundingSphereRadius * Device.vCameraDirection.z;
+=======
+		cull_COP.mad(Device.vCameraPosition, RainLight->direction, -tweak_rain_COP_initial_offs);
+		cull_COP.x += fBoundingSphereRadius * Device.vCameraDirection.x;
+		cull_COP.z += fBoundingSphereRadius * Device.vCameraDirection.z;
+>>>>>>> april26
 
 		// Create frustum for query
 		rainwet_cull_frustum._clear();
@@ -126,8 +151,8 @@ void CRender::render_rain()
 		// view: auto find 'up' and 'right' vectors
 		Fmatrix mdir_View, mdir_Project;
 		Fvector L_dir, L_up, L_right, L_pos;
-		L_pos.set(RainLight.position);
-		L_dir.set(RainLight.direction).normalize();
+		L_pos.set(RainLight->position);
+		L_dir.set(RainLight->direction).normalize();
 		L_right.set(1, 0, 0);
 		if (_abs(L_right.dotproduct(L_dir)) > .99f) L_right.set(0, 0, 1);
 		L_up.crossproduct(L_dir, L_right).normalize();
@@ -158,7 +183,7 @@ void CRender::render_rain()
 		//	Offset RainLight position to center rain shadowmap
 		Fvector3 vRectOffset;
 		vRectOffset.set(fBoundingSphereRadius * Device.vCameraDirection.x, 0,
-		                fBoundingSphereRadius * Device.vCameraDirection.z);
+			fBoundingSphereRadius * Device.vCameraDirection.z);
 		bb.min.x = -fBoundingSphereRadius + vRectOffset.x;
 		bb.max.x = fBoundingSphereRadius + vRectOffset.x;
 		bb.min.y = -fBoundingSphereRadius + vRectOffset.z;
@@ -166,9 +191,14 @@ void CRender::render_rain()
 
 		//D3DXMatrixOrthoOffCenterLH	((D3DXMATRIX*)&mdir_Project,bb.min.x,bb.max.x,  bb.min.y,bb.max.y,  bb.min.z-tweak_rain_ortho_xform_initial_offs,bb.max.z);
 		D3DXMatrixOrthoOffCenterLH((D3DXMATRIX*)&mdir_Project, bb.min.x, bb.max.x, bb.min.y, bb.max.y,
+<<<<<<< HEAD
 		                           bb.min.z - tweak_rain_ortho_xform_initial_offs,
 		                           bb.min.z + 2 * tweak_rain_ortho_xform_initial_offs);
 		rainwet_cull_xform.mul(mdir_Project, mdir_View);
+=======
+			bb.min.z - tweak_rain_ortho_xform_initial_offs,
+			bb.min.z + 2 * tweak_rain_ortho_xform_initial_offs);
+>>>>>>> april26
 
 		s32		limit = _min(o.smapsize, ps_r3_dyn_wet_surf_sm_res);
 
@@ -197,10 +227,10 @@ void CRender::render_rain()
 		adjust.translate(diff);
 		rainwet_cull_xform.mulA_44(adjust);
 
-		RainLight.X.D.minX = 0;
-		RainLight.X.D.maxX = limit;
-		RainLight.X.D.minY = 0;
-		RainLight.X.D.maxY = limit;
+		RainLight->X.D.minX = 0;
+		RainLight->X.D.maxX = limit;
+		RainLight->X.D.minY = 0;
+		RainLight->X.D.maxY = limit;
 
 		// full-xform
 		FPU::m24r();
@@ -212,7 +242,11 @@ void CRender::render_rain()
 	GMRainWet.r_dsgraph_capture_static();
 
 	// Finalize & Cleanup
+<<<<<<< HEAD
 	RainLight.X.D.combine = rainwet_cull_xform;
+=======
+	RainLight->X.D.combine = cull_xform; //*((Fmatrix*)&m_LightViewProj);
+>>>>>>> april26
 
 	// Render shadow-map
 	//. !!! We should clip based on shrinked frustum (again)
@@ -221,11 +255,18 @@ void CRender::render_rain()
 		bool bForward_Shadows = GMRainWet.RGraph.mapStaticPasses[1][0].size() || GMRainWet.RGraph.mapDynamicPasses[1][0].size() || GMRainWet.RGraph.mapStaticSorted.Sorted.size() || GMRainWet.RGraph.mapDynamicSorted.Sorted.size();
 		if(bDeffered_Shadows || bForward_Shadows)
 		{
-			Target->phase_smap_direct(&RainLight, SE_SUN_RAIN_SMAP);
+			Target->phase_smap_direct(RainLight, Target->rt_smap_depth, SE_SUN_RAIN_SMAP);
 			RCache.set_xform_world(Fidentity);
 			RCache.set_xform_view(Fidentity);
+<<<<<<< HEAD
 			RCache.set_xform_project(RainLight.X.D.combine);
 			GMRainWet.r_dsgraph_render_graph(0);
+=======
+			RCache.set_xform_project(RainLight->X.D.combine);
+			r_dsgraph_render_graph(0);
+			//if (ps_r2_ls_flags.test(R2FLAG_SUN_DETAILS))	
+			//	Details->Render					()	;
+>>>>>>> april26
 		}
 	}
 
@@ -233,6 +274,19 @@ void CRender::render_rain()
 	{
 		//		fuckingsun->svis.end					();
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CRender::render_rain()
+{
+	if (!is_raining())
+		return;
+
+	PIX_EVENT(render_rain);
+
+	auto RainLight = static_cast<light*>(Lights.rain_light._get());
+	if (!RainLight)
+		return;
 
 	// Restore XForms
 	RCache.set_xform_world(Fidentity);
@@ -240,6 +294,11 @@ void CRender::render_rain()
 	RCache.set_xform_project(Device.mProject);
 
 	// Accumulate
+	 
+	// FIXME: Reusing cascade smap for now.
+	auto old_surf = Target->rt_smap_depth->pTexture->surface_get();
+	Target->rt_smap_depth->pTexture->surface_set(Target->rt_smap_depth->pTexture->surface_get());
 	Target->phase_rain();
-	Target->draw_rain(RainLight);
+	Target->draw_rain(*RainLight);
+	Target->rt_smap_depth->pTexture->surface_set(old_surf);
 }

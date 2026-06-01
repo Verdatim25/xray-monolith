@@ -47,6 +47,7 @@ void CRenderTarget::phase_combine()
 	Fvector2 p0, p1;
 
 	//*** exposure-pipeline
+<<<<<<< HEAD
 	if (Device.m_SecondViewport.IsSVPActive())	//--#SM+#-- +SecondVP+ Fix for screen flickering
 	{
 		if (t_LUM_src != rt_LUM_pool[0]->pTexture)
@@ -55,6 +56,10 @@ void CRenderTarget::phase_combine()
 			t_LUM_dest->surface_set(rt_LUM_pool[1]->pSurface);
 	}
 	else
+=======
+	u32			gpu_id	= Device.dwFrame%HW.Caps.iGPUNum;
+
+>>>>>>> april26
 	{
 		if (t_LUM_src != rt_LUM_pool[0]->pTexture)
 			t_LUM_src->surface_set(rt_LUM_pool[0]->pSurface);

@@ -336,6 +336,33 @@ void mt_FreezeThread(void *ptr) {
 	}
 }
 
+void CRenderDevice::prepare_matrices()
+{
+	auto svp = m_SecondViewport.IsSVPFrame();
+	// Previous frame data -- 
+	mView_prev = Device.matrices_previous[svp].mView;
+	mProject_prev = Device.matrices_previous[svp].mProject;
+	//mFullTransform_prev = mFullTransform_saved; // Unused?
+
+	m_pRender->SetCacheXform_prev(mView_prev, mProject_prev);
+
+	// Save previous frame grass benders data
+	IGame_Persistent::grass_data& GData = g_pGamePersistent->grass_shader_data;
+
+	GData.prev_pos[svp][0].set(Device.vCameraPosition.x, Device.vCameraPosition.y, Device.vCameraPosition.z, -1);
+	GData.prev_dir[svp][0].set(0.0f, -99.0f, 0.0f, 1.0f);
+
+	for (int pBend = 1; pBend < _min(16, ps_ssfx_grass_interactive.y + 1); pBend++)
+	{
+		GData.prev_pos[svp][pBend].set(GData.pos[pBend].x, GData.pos[pBend].y, GData.pos[pBend].z, GData.radius_curr[pBend]);
+		GData.prev_dir[svp][pBend].set(GData.dir[pBend].x, GData.dir[pBend].y, GData.dir[pBend].z, GData.str[pBend]);
+	}
+
+	// Save wind animation position
+	wind_anim_prev = wind_anim_saved;
+	wind_anim_saved = g_pGamePersistent->Environment().wind_anim;
+}
+
 void CRenderDevice::on_idle()
 {
 
@@ -420,6 +447,7 @@ void CRenderDevice::on_idle()
 	mFullTransformCam.mul(mProjectCam, mView);
 	m_pRender->SetCacheXform(mView, mProject);
 
+<<<<<<< HEAD
 	mViewHud_prev = mViewHud;
 	mProjectHud_prev = mProjectHud;
 	mFullTransformHud_prev = mFullTransformHud;
@@ -431,9 +459,16 @@ void CRenderDevice::on_idle()
 	mView_prev = mView_saved;
 	mProject_prev = mProject_saved;
 	mFullTransform_prev = mFullTransform_saved; // Unused?
+=======
+	Device.matrices_previous[0] = Device.matrices[0];
+	Device.matrices_previous[1] = Device.matrices[1];
+>>>>>>> april26
 
-	m_pRender->SetCacheXform_prev(mView_prev, mProject_prev);
+	Device.matrices[0].mView = mView;
+	Device.matrices[0].mProject = mProject;
+	Device.matrices[0].mProjectHud = mProjectHud;
 
+<<<<<<< HEAD
 	mProjectHud.build_projection(deg2rad(psHUD_FOV * 83.f), fASPECT, R_VIEWPORT_NEAR, g_pGamePersistent->Environment().CurrentEnv->far_plane);
 	mProjectCam.build_projection(deg2rad(83.f), fASPECT, R_VIEWPORT_NEAR, g_pGamePersistent->Environment().CurrentEnv->far_plane);
 	
@@ -457,6 +492,9 @@ void CRenderDevice::on_idle()
 	// Save wind animation position
 	wind_anim_prev = wind_anim_saved;
 	wind_anim_saved = g_pGamePersistent->Environment().wind_anim;
+=======
+	prepare_matrices();
+>>>>>>> april26
 
 	//RCache.set_xform_view ( mView );
 	//RCache.set_xform_project ( mProject );
@@ -910,9 +948,13 @@ void CRenderDevice::CSecondVPParams::SetSVPActive(bool bState) //--#SM+#-- +Seco
 	isActive = bState;
 	if (g_pGamePersistent != NULL)
 		g_pGamePersistent->m_pGShaderConstants->m_blender_mode.z = (isActive ? 1.0f : 0.0f);
+<<<<<<< HEAD
 }
 
 bool CRenderDevice::CSecondVPParams::IsSVPFrame() //--#SM+#-- +SecondVP+
 {
 	return IsSVPActive() && Device.dwFrame % frameDelay == 0;
 }
+=======
+}
+>>>>>>> april26

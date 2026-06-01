@@ -48,6 +48,8 @@ light::light()
 	vis.frame2test = 0; // xffffffff;
 	CHK_DX(CreateQuery(&vis.Q, D3DQUERYTYPE_OCCLUSION));
 	vis.visible = true;
+	vis.visible_frags = 0;
+	vis.accumulating_frags = 0;
 	vis.pending = false;
 	m_sectors = {};
 	X.S.posX = 0;
@@ -66,6 +68,7 @@ light::~light()
 	_RELEASE(vis.Q);
 #endif // (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4)
 	set_active(false);
+<<<<<<< HEAD
 
 	// remove from Lights_LastFrame
 #if (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4)
@@ -87,6 +90,8 @@ void light::destroy(bool deffered)
 	}
 	else
 		xr_delete(this);
+=======
+>>>>>>> april26
 }
 
 #if (RENDER==R_R2) || (RENDER==R_R3) || (RENDER==R_R4)

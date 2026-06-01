@@ -21,6 +21,8 @@ XRCORE_API xrCore Core;
 extern XRCORE_API u32 build_id;
 extern XRCORE_API LPCSTR build_date;
 
+auto PIP_VER = "PiP 0.0.14";
+
 namespace CPU
 {
 	extern void Detect();
@@ -141,7 +143,11 @@ void xrCore::_initialize(LPCSTR _ApplicationName, xrLogger::LogCallback cb, BOOL
 		Msg("'%s' build %d, %s\n", "xrCore", build_id, build_date);
 
 		// demonized: Print modded exes version
+<<<<<<< HEAD
 		Msg("%s version %s\n", get_modded_exes_name(), get_modded_exes_version_string().c_str());
+=======
+		Msg("Modded exes version %d - %s\n", get_modded_exes_version(), PIP_VER);
+>>>>>>> april26
 		Msg("Game started: %s\n", timeInDMYHMSMMM().c_str());
 		EFS._initialize();
 #ifdef DEBUG
