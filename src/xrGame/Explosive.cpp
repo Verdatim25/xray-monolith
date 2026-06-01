@@ -1,4 +1,4 @@
-// Explosive.cpp: интерфейс для взврывающихся объектов
+// Explosive.cpp: РёРЅС‚РµСЂС„РµР№СЃ РґР»СЏ РІР·РІСЂС‹РІР°СЋС‰РёС…СЃСЏ РѕР±СЉРµРєС‚РѕРІ
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -11,7 +11,7 @@
 //#include "PSObject.h"
 #include "ParticlesObject.h"
 
-//для вызова статических функций поражения осколками
+//РґР»СЏ РІС‹Р·РѕРІР° СЃС‚Р°С‚РёС‡РµСЃРєРёС… С„СѓРЅРєС†РёР№ РїРѕСЂР°Р¶РµРЅРёСЏ РѕСЃРєРѕР»РєР°РјРё
 #include "Weapon.h"
 
 #include "actor.h"
@@ -75,6 +75,10 @@ CExplosive::CExplosive(void)
 	m_fExplodeHideDurationMax = 0;
 	m_bDynamicParticles = FALSE;
 	m_pExpParticle = NULL;
+
+#ifdef CEXPLOSIVE_CHANGE
+	m_on_explode_callback._set("");
+#endif
 }
 
 void CExplosive::LightCreate()
@@ -112,13 +116,13 @@ void CExplosive::Load(CInifile const* ini, LPCSTR section)
 	m_fUpThrowFactor = ini->r_float(section, "up_throw_factor");
 
 	// momopate: Extended shrapnel customization
-	m_fFragAP = READ_IF_EXISTS(pSettings, r_float, section, "frags_ap", 1.0f);
-	m_fFragAirRes = READ_IF_EXISTS(pSettings, r_float, section, "frags_air_resistance", 1.0f);
-	m_bFragTracer = READ_IF_EXISTS(pSettings, r_bool, section, "frags_tracer", false);
-	m_bFrag4to1Tracer = READ_IF_EXISTS(pSettings, r_bool, section, "frags_4to1_tracer", false);
-	m_bFragMagneticBeamShot = READ_IF_EXISTS(pSettings, r_bool, section, "frags_magnetic_beam_shot", false);	// Probably has literal zero use cases but, you know, what if?
-	m_bFragAllowRicochet = READ_IF_EXISTS(pSettings, r_bool, section, "frags_allow_ricochet", true);
-	u8FragColorID = READ_IF_EXISTS(pSettings, r_u8, section, "frags_tracer_color_ID", 0);
+	m_fFragAP = READ_IF_EXISTS(ini, r_float, section, "frags_ap", 1.0f);
+	m_fFragAirRes = READ_IF_EXISTS(ini, r_float, section, "frags_air_resistance", 1.0f);
+	m_bFragTracer = READ_IF_EXISTS(ini, r_bool, section, "frags_tracer", false);
+	m_bFrag4to1Tracer = READ_IF_EXISTS(ini, r_bool, section, "frags_4to1_tracer", false);
+	m_bFragMagneticBeamShot = READ_IF_EXISTS(ini, r_bool, section, "frags_magnetic_beam_shot", false);	// Probably has literal zero use cases but, you know, what if?
+	m_bFragAllowRicochet = READ_IF_EXISTS(ini, r_bool, section, "frags_allow_ricochet", true);
+	u8FragColorID = READ_IF_EXISTS(ini, r_u8, section, "frags_tracer_color_ID", 0);
 
 	fWallmarkSize = ini->r_float(section, "wm_size");
 	R_ASSERT(fWallmarkSize>0);
@@ -129,7 +133,7 @@ void CExplosive::Load(CInifile const* ini, LPCSTR section)
 	m_fLightRange = ini->r_float(section, "light_range");
 	m_fLightTime = ini->r_float(section, "light_time");
 
-	//трассы для разлета осколков
+	//С‚СЂР°СЃСЃС‹ РґР»СЏ СЂР°Р·Р»РµС‚Р° РѕСЃРєРѕР»РєРѕРІ
 	m_fFragmentSpeed = ini->r_float(section, "fragment_speed");
 
 	m_layered_sounds.LoadSound(ini, section, "snd_explode", "sndExplode", false, m_eSoundExplode);
@@ -163,6 +167,10 @@ void CExplosive::Load(CInifile const* ini, LPCSTR section)
 	m_bDynamicParticles = FALSE;
 	if (ini->line_exist(section, "dynamic_explosion_particles"))
 		m_bDynamicParticles = ini->r_bool(section, "dynamic_explosion_particles");
+
+#ifdef CEXPLOSIVE_CHANGE
+	m_on_explode_callback._set(READ_IF_EXISTS(ini, r_string, section, "on_explode", ""));
+#endif
 }
 
 void CExplosive::net_Destroy()
@@ -195,7 +203,7 @@ struct SExpQParams
 	float shoot_factor;
 };
 
-//проверка на попадание "осколком" по объекту
+//РїСЂРѕРІРµСЂРєР° РЅР° РїРѕРїР°РґР°РЅРёРµ "РѕСЃРєРѕР»РєРѕРј" РїРѕ РѕР±СЉРµРєС‚Сѓ
 ICF static BOOL grenade_hit_callback(collide::rq_result& result, LPVOID params)
 {
 	SExpQParams& ep = *(SExpQParams*)params;
@@ -211,7 +219,7 @@ ICF static BOOL grenade_hit_callback(collide::rq_result& result, LPVOID params)
 	}
 	else
 	{
-		//получить треугольник и узнать его материал
+		//РїРѕР»СѓС‡РёС‚СЊ С‚СЂРµСѓРіРѕР»СЊРЅРёРє Рё СѓР·РЅР°С‚СЊ РµРіРѕ РјР°С‚РµСЂРёР°Р»
 		CDB::TRI* T = Level().ObjectSpace.GetStaticTris() + result.element;
 		mtl_idx = T->material;
 	}
@@ -365,11 +373,11 @@ void CExplosive::Explode()
 	
 	//	Msg("---------CExplosive Explode [%d] frame[%d]",cast_game_object()->ID(), Device.dwFrame);
 	OnBeforeExplosion();
-	//играем звук взрыва
+	//РёРіСЂР°РµРј Р·РІСѓРє РІР·СЂС‹РІР°
 
 	m_layered_sounds.PlaySound("sndExplode", pos, smart_cast<CObject*>(this), false, false, (u8)-1);
 
-	//показываем эффекты
+	//РїРѕРєР°Р·С‹РІР°РµРј СЌС„С„РµРєС‚С‹
 
 	m_wallmark_manager.PlaceWallmarks(pos);
 
@@ -388,14 +396,14 @@ void CExplosive::Explode()
 	pStaticPG->UpdateParent(explode_matrix, vel);
 	pStaticPG->Play(false);
 
-	//включаем подсветку от взрыва
+	//РІРєР»СЋС‡Р°РµРј РїРѕРґСЃРІРµС‚РєСѓ РѕС‚ РІР·СЂС‹РІР°
 	StartLight();
 
 	//trace frags
 	Fvector frag_dir;
 
 	//////////////////////////////
-	//осколки
+	//РѕСЃРєРѕР»РєРё
 	//////////////////////////////
 	//-------------------------------------
 	bool SendHits = false;
@@ -432,7 +440,7 @@ void CExplosive::Explode()
 	if (cast_game_object()->Remote()) return;
 
 	/////////////////////////////////
-	//взрывная волна
+	//РІР·СЂС‹РІРЅР°СЏ РІРѕР»РЅР°
 	////////////////////////////////
 	//---------------------------------------------------------------------
 	xr_vector<ISpatial*> ISpatialResult;
@@ -519,7 +527,7 @@ void CExplosive::UpdateCL()
 		OnAfterExplosion();
 		return;
 	}
-	//время вышло, убираем объект взрывчатки
+	//РІСЂРµРјСЏ РІС‹С€Р»Рѕ, СѓР±РёСЂР°РµРј РѕР±СЉРµРєС‚ РІР·СЂС‹РІС‡Р°С‚РєРё
 	if (m_fExplodeDuration < 0.f && m_blasted_objects.empty())
 	{
 		m_explosion_flags.set(flExploded,TRUE);
@@ -543,7 +551,7 @@ void CExplosive::UpdateCL()
 		UpdateExplosionPos();
 		UpdateExplosionParticles();
 		ExplodeWaveProcess();
-		//обновить подсветку взрыва
+		//РѕР±РЅРѕРІРёС‚СЊ РїРѕРґСЃРІРµС‚РєСѓ РІР·СЂС‹РІР°
 		if (m_pLight && m_pLight->get_active() && m_fLightTime > 0)
 		{
 			if (m_fExplodeDuration > (m_fExplodeDurationMax - m_fLightTime))
@@ -566,7 +574,7 @@ void CExplosive::OnAfterExplosion()
 		CParticlesObject::Destroy(m_pExpParticle);
 		m_pExpParticle = NULL;
 	}
-	//ликвидировать сам объект 
+	//Р»РёРєРІРёРґРёСЂРѕРІР°С‚СЊ СЃР°Рј РѕР±СЉРµРєС‚ 
 	if (cast_game_object()->Local()) cast_game_object()->DestroyObject();
 
 	//	NET_Packet			P;
@@ -578,11 +586,10 @@ void CExplosive::OnAfterExplosion()
 void CExplosive::OnBeforeExplosion()
 {
 #ifdef CEXPLOSIVE_CHANGE
-	LPCSTR lua_function_str = READ_IF_EXISTS(pSettings, r_string, cast_game_object()->cNameSect_str(), "on_explode", NULL);
-	if (lua_function_str && strlen(lua_function_str))
+	if (m_on_explode_callback.size())
 	{
-		luabind::functor<void> lua_function;
-		if (ai().script_engine().functor(lua_function_str, lua_function))
+		::luabind::functor<void> lua_function;
+		if (ai().script_engine().functor(m_on_explode_callback.c_str(), lua_function))
 		{
 			lua_function(cast_game_object()->lua_game_object());
 		}
@@ -675,8 +682,8 @@ void CExplosive::FindNormal(Fvector& normal)
 	if (!result || RQ.O)
 	{
 		normal.set(0, 1, 0);
-		//если лежим на статике
-		//найти треугольник и вычислить нормаль по нему
+		//РµСЃР»Рё Р»РµР¶РёРј РЅР° СЃС‚Р°С‚РёРєРµ
+		//РЅР°Р№С‚Рё С‚СЂРµСѓРіРѕР»СЊРЅРёРє Рё РІС‹С‡РёСЃР»РёС‚СЊ РЅРѕСЂРјР°Р»СЊ РїРѕ РЅРµРјСѓ
 	}
 	else
 	{
@@ -731,7 +738,7 @@ void CExplosive::ExplodeWaveProcessObject(collide::rq_results& storage, CPhysics
 {
 	Fvector l_goPos;
 	if (l_pGO->Visual()) l_pGO->Center(l_goPos);
-	else return; //мне непонятно зачем наносить хит от взрыва по объектам не имеющим вижуал - поэтому игнорируем
+	else return; //РјРЅРµ РЅРµРїРѕРЅСЏС‚РЅРѕ Р·Р°С‡РµРј РЅР°РЅРѕСЃРёС‚СЊ С…РёС‚ РѕС‚ РІР·СЂС‹РІР° РїРѕ РѕР±СЉРµРєС‚Р°Рј РЅРµ РёРјРµСЋС‰РёРј РІРёР¶СѓР°Р» - РїРѕСЌС‚РѕРјСѓ РёРіРЅРѕСЂРёСЂСѓРµРј
 
 #ifdef DEBUG
 	if(ph_dbg_draw_mask.test(phDbgDrawExplosions))
@@ -752,8 +759,8 @@ void CExplosive::ExplodeWaveProcessObject(collide::rq_results& storage, CPhysics
 
 		float rmag = _sqrt(m_fUpThrowFactor * m_fUpThrowFactor + 1.f + 2.f * m_fUpThrowFactor * l_dir.y);
 		l_dir.y += m_fUpThrowFactor;
-		//rmag -модуль l_dir после l_dir.y += m_fUpThrowFactor, модуль=_sqrt(l_dir^2+y^2+2.*(l_dir,y)),y=(0,m_fUpThrowFactor,0) (до этого модуль l_dir =1)
-		l_dir.mul(1.f / rmag); //перенормировка
+		//rmag -РјРѕРґСѓР»СЊ l_dir РїРѕСЃР»Рµ l_dir.y += m_fUpThrowFactor, РјРѕРґСѓР»СЊ=_sqrt(l_dir^2+y^2+2.*(l_dir,y)),y=(0,m_fUpThrowFactor,0) (РґРѕ СЌС‚РѕРіРѕ РјРѕРґСѓР»СЊ l_dir =1)
+		l_dir.mul(1.f / rmag); //РїРµСЂРµРЅРѕСЂРјРёСЂРѕРІРєР°
 		NET_Packet P;
 		SHit HS;
 		HS.GenHeader(GE_HIT, l_pGO->ID()); //		cast_game_object()->u_EventGen		(P,GE_HIT,l_pGO->ID());

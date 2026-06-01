@@ -32,6 +32,7 @@ CPda::CPda(void)
 	m_fLR_InertiaFactor = 0.f;
 	m_fUD_InertiaFactor = 0.f;
 	m_bNoticedEmptyBattery = false;
+	m_PdaEnabled = true;
 }
 
 CPda::~CPda() {}
@@ -76,6 +77,29 @@ void CPda::Load(LPCSTR section)
 	m_screen_off_delay = READ_IF_EXISTS(pSettings, r_float, section, "screen_off_delay", 0.f);
 	m_thumb_rot[0] = READ_IF_EXISTS(pSettings, r_float, section, "thumb_rot_x", 0.f);
 	m_thumb_rot[1] = READ_IF_EXISTS(pSettings, r_float, section, "thumb_rot_y", 0.f);
+	m_nearwall_zoomed_range = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_zoomed_range", .1f);
+}
+
+Fmatrix CPda::RayTransform()
+{
+	Fmatrix matrix = CHudItem::RayTransform();
+	matrix.i = Device.vCameraRight;
+	matrix.j = Device.vCameraTop;
+	matrix.k = Device.vCameraDirection;
+	return matrix;
+}
+
+static float lerp(float a, float b, float t)
+{
+	return a * (1 - t) + b * t;
+}
+
+float CPda::GetNearWallOffset()
+{
+	float ofs = CHudItem::GetNearWallOffset();
+	float ofs_ads = ofs;
+	clamp(ofs_ads, ofs_ads, m_nearwall_zoomed_range);
+	return lerp(ofs, ofs_ads, m_fZoomfactor);
 }
 
 void CPda::OnStateSwitch(u32 S, u32 oldState)
@@ -311,7 +335,7 @@ void CPda::UpdateCL()
 			{
 				if (!m_bPowerSaving)
 				{
-					luabind::functor<void> funct;
+					::luabind::functor<void> funct;
 					if (ai().script_engine().functor("pda.on_low_battery", funct))
 						funct();
 					m_bPowerSaving = true;
@@ -1064,7 +1088,7 @@ void CPda::PlayScriptFunction()
 {
 	if (xr_strcmp(m_functor_str, ""))
 	{
-		luabind::functor<void> m_functor;
+		::luabind::functor<void> m_functor;
 		R_ASSERT(ai().script_engine().functor(m_functor_str.c_str(), m_functor));
 		m_functor();
 	}

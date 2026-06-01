@@ -34,9 +34,9 @@ using namespace luabind;
 
 extern CScriptActionPlanner* script_action_planner(CScriptGameObject* obj);
 
-class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject>& instance)
+class_<CScriptGameObject> script_register_game_object1(class_<CScriptGameObject> &&instance)
 {
-	instance
+	return std::move(instance)
 		.enum_("relation")
 		[
 			value("friend", int(ALife::eRelationTypeFriend)),
@@ -88,8 +88,12 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("change_morale", &CScriptGameObject::ChangeMorale)
 	
 		//		.def("get_bleeding",				&CScriptGameObject::GetBleeding)
-		.def("center", &CScriptGameObject::Center)
+		
+		// demonized: exports
 		.def("xform", &CScriptGameObject::Xform)
+		.def("bounding_box", &CScriptGameObject::bounding_box)
+
+		.def("center", &CScriptGameObject::Center)
 		.def("position", &CScriptGameObject::Position)
 		.def("direction", &CScriptGameObject::Direction)
 		.def("clsid", &CScriptGameObject::clsid)
@@ -105,6 +109,11 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("power_critical", &CScriptGameObject::GetPowerCritical)
 		.def("psy_factor", &CScriptGameObject::GetPsyFactor)
 		.def("set_psy_factor", &CScriptGameObject::SetPsyFactor)
+
+		// Added by Ncenka - allow turn on/off devices
+		.def("is_device_enabled", &CScriptGameObject::IsDeviceEnabled)
+		.def("set_device_enabled", &CScriptGameObject::SetDeviceEnabled)
+		
 		.def("death_time", &CScriptGameObject::DeathTime)
 		//		.def("armor",						&CScriptGameObject::Armor)
 		.def("max_health", &CScriptGameObject::MaxHealth)
@@ -134,7 +143,7 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 
 		.def("rank", &CScriptGameObject::GetRank)
 		.def("command", &CScriptGameObject::AddAction)
-		.def("action", &CScriptGameObject::GetCurrentAction, adopt(result))
+		.def("action", &CScriptGameObject::GetCurrentAction, adopt<result>())
 		.def("object_count", &CScriptGameObject::GetInventoryObjectCount)
 		.def("object", (CScriptGameObject *(CScriptGameObject::*)(LPCSTR))(&CScriptGameObject::GetObjectByName))
 		.def("object", (CScriptGameObject *(CScriptGameObject::*)(int))(&CScriptGameObject::GetObjectByIndex))
@@ -142,27 +151,27 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("active_item", &CScriptGameObject::GetActiveItem)
 
 		.def("set_callback",
-		     (void (CScriptGameObject::*)(GameObject::ECallbackType, const luabind::functor<void>&))(&CScriptGameObject
+		     (void (CScriptGameObject::*)(GameObject::ECallbackType, const ::luabind::functor<void>&))(&CScriptGameObject
 			     ::SetCallback))
 		.def("set_callback",
-		     (void (CScriptGameObject::*)(GameObject::ECallbackType, const luabind::functor<void>&,
-		                                  const luabind::object&))(&CScriptGameObject::SetCallback))
+		     (void (CScriptGameObject::*)(GameObject::ECallbackType, const ::luabind::functor<void>&,
+		                                  const ::luabind::object&))(&CScriptGameObject::SetCallback))
 		.def("set_callback", (void (CScriptGameObject::*)(GameObject::ECallbackType))(&CScriptGameObject::SetCallback))
 
 		.def("set_patrol_extrapolate_callback",
 		     (void (CScriptGameObject::*)())(&CScriptGameObject::set_patrol_extrapolate_callback))
 		.def("set_patrol_extrapolate_callback",
-		     (void (CScriptGameObject::*)(const luabind::functor<bool>&))(&CScriptGameObject::
+		     (void (CScriptGameObject::*)(const ::luabind::functor<bool>&))(&CScriptGameObject::
 			     set_patrol_extrapolate_callback))
 		.def("set_patrol_extrapolate_callback",
-		     (void (CScriptGameObject::*)(const luabind::functor<bool>&, const luabind::object&))(&CScriptGameObject::
+		     (void (CScriptGameObject::*)(const ::luabind::functor<bool>&, const ::luabind::object&))(&CScriptGameObject::
 			     set_patrol_extrapolate_callback))
 
 		.def("set_enemy_callback", (void (CScriptGameObject::*)())(&CScriptGameObject::set_enemy_callback))
 		.def("set_enemy_callback",
-		     (void (CScriptGameObject::*)(const luabind::functor<bool>&))(&CScriptGameObject::set_enemy_callback))
+		     (void (CScriptGameObject::*)(const ::luabind::functor<bool>&))(&CScriptGameObject::set_enemy_callback))
 		.def("set_enemy_callback",
-		     (void (CScriptGameObject::*)(const luabind::functor<bool>&, const luabind::object&))(&CScriptGameObject::
+		     (void (CScriptGameObject::*)(const ::luabind::functor<bool>&, const ::luabind::object&))(&CScriptGameObject::
 			     set_enemy_callback))
 
 		.def("patrol", &CScriptGameObject::GetPatrolPathName)
@@ -194,8 +203,8 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("action_count", &CScriptGameObject::GetActionCount)
 		.def("action_by_index", &CScriptGameObject::GetActionByIndex)
 
-		//.def("set_hear_callback",			(void (CScriptGameObject::*)(const luabind::object &, LPCSTR))(&CScriptGameObject::SetSoundCallback))
-		//.def("set_hear_callback",			(void (CScriptGameObject::*)(const luabind::functor<void> &))(&CScriptGameObject::SetSoundCallback))
+		//.def("set_hear_callback",			(void (CScriptGameObject::*)(const ::luabind::object &, LPCSTR))(&CScriptGameObject::SetSoundCallback))
+		//.def("set_hear_callback",			(void (CScriptGameObject::*)(const ::luabind::functor<void> &))(&CScriptGameObject::SetSoundCallback))
 		//.def("clear_hear_callback",		&CScriptGameObject::ClearSoundCallback)
 
 		.def("memory_time", &CScriptGameObject::memory_time)
@@ -207,7 +216,7 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("get_enemy_strength", &CScriptGameObject::GetEnemyStrength)
 		.def("get_sound_info", &CScriptGameObject::GetSoundInfo)
 		.def("get_monster_hit_info", &CScriptGameObject::GetMonsterHitInfo)
-		.def("bind_object", &CScriptGameObject::bind_object, adopt(_2))
+		.def("bind_object", &CScriptGameObject::bind_object, adopt<2>())
 		.def("motivation_action_manager", &script_action_planner)
 
 		// basemonster
@@ -388,9 +397,9 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("set_smart_cover_target", (void (CScriptGameObject::*)())&CScriptGameObject::set_smart_cover_target)
 
 		.def("set_smart_cover_target_selector",
-		     (void (CScriptGameObject::*)(luabind::functor<void>))&CScriptGameObject::set_smart_cover_target_selector)
+		     (void (CScriptGameObject::*)(::luabind::functor<void>))&CScriptGameObject::set_smart_cover_target_selector)
 		.def("set_smart_cover_target_selector",
-		     (void (CScriptGameObject::*)(luabind::functor<void>, luabind::object))&CScriptGameObject::
+		     (void (CScriptGameObject::*)(::luabind::functor<void>, ::luabind::object))&CScriptGameObject::
 		     set_smart_cover_target_selector)
 		.def("set_smart_cover_target_selector",
 		     (void (CScriptGameObject::*)())&CScriptGameObject::set_smart_cover_target_selector)
@@ -444,5 +453,4 @@ class_<CScriptGameObject>& script_register_game_object1(class_<CScriptGameObject
 		.def("is_weapon_going_to_be_strapped", &CScriptGameObject::is_weapon_going_to_be_strapped)
 
 		.def("reload_weapon", &CScriptGameObject::reload_weapon);
-	return (instance);
 }

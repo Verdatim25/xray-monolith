@@ -33,6 +33,7 @@
 #include "animation_movement_controller.h"
 #include "../xrengine/xr_collide_form.h"
 #include "script_attachment_manager.h"
+#include "player_hud.h"
 extern MagicBox3 MagicMinBox(int iQuantity, const Fvector* akPoint);
 
 #pragma warning(push)
@@ -119,7 +120,7 @@ void CGameObject::net_Destroy()
 
 	VERIFY(m_spawned);
 
-	luabind::functor<void> funct;
+	::luabind::functor<void> funct;
 	if (ai().script_engine().functor("_G.CGameObject_NetDestroy", funct))
 	{
 		funct(this->lua_game_object());
@@ -276,7 +277,19 @@ BOOL CGameObject::net_Spawn(CSE_Abstract* DC)
 	const CSE_Visual* visual = smart_cast<const CSE_Visual*>(E);
 	if (visual)
 	{
-		cNameVisual_set(visual_name(E));
+		auto visualName = visual_name(E);
+
+		// If model doesn't exist, and object config has "visual" field, try to update the model
+		if(!Render->models_Exists(visualName) && pSettings->line_exist(cNameSect(), "visual")) {
+			auto visualFromSec = pSettings->r_string(cNameSect(), "visual");
+			Msg("~WARNING : Failed to load '%s', falling back to '%s'", visualName, visualFromSec);
+			cNameVisual_set(visualFromSec);
+		}
+		// Otherwise... proceed as normal (will CTD if model doesn't exist)
+		else {
+			cNameVisual_set(visualName);
+		}
+
 		if (visual->flags.test(CSE_Visual::flObstacle))
 		{
 			ISpatial* self = smart_cast<ISpatial*>(this);
@@ -450,7 +463,7 @@ BOOL CGameObject::net_Spawn(CSE_Abstract* DC)
 	}
 	BOOL ret =CScriptBinder::net_Spawn(DC);
 #else
-	luabind::functor<void> funct;
+	::luabind::functor<void> funct;
 	if (ai().script_engine().functor("_G.CGameObject_NetSpawn", funct))
 	{
 		funct(this->lua_game_object());
@@ -745,37 +758,134 @@ void CGameObject::RenderAttachments()
 {
 	if (m_script_attachments.size())
 	{
-		xr_map<u16, script_attachment*>::iterator it = m_script_attachments.begin();
-		xr_map<u16, script_attachment*>::iterator it_e = m_script_attachments.end();
-		for (; it != it_e; ++it)
+		for (auto& pair : m_script_attachments)
 		{
-			script_attachment* att = (*it).second;
-			if (att->GetFFlags().test(eSA_RenderWorld))
+			script_attachment* att = pair.second;
+			if (att->GetType() == eSA_World)
 			{
 				att->Render(Visual()->dcast_PKinematics(), &XFORM());
 
 				if (::Render->get_generation() == ::Render->GENERATION_R1)
 					g_pGamePersistent->AttachmentUIsToRender.push_back(att);
 				else
-					att->RenderUI(false);
+					att->RenderUI();
 			}
 		}
 	}
 }
 
-script_attachment* CGameObject::add_attachment(u16 slot, script_attachment* att)
+//#define DEBUG_VISBOX
+
+#ifdef DEBUG_VISBOX
+#include "debug_renderer.h"
+#endif
+
+static void update_visbox(IKinematics* k)
+{
+	CGameObject* obj = static_cast<CGameObject*>(k->GetUpdateCallbackParam());
+	if (!obj) return;
+
+	if (k->NeedUCalc())
+	{
+		for (auto& pair : *obj->GetAttachments())
+		{
+			script_attachment* att = pair.second;
+			if (att->GetType() != eSA_World) continue;
+
+			Fbox Box = att->Box();
+
+			Fmatrix offset;
+			offset.mul(att->BoneTransform(k), att->GetOffset());
+			Box.xform(offset);
+
+			// Update Box
+			Fbox& kbox = const_cast<Fbox&>(k->GetBox());
+			kbox.merge(Box);
+
+			// Update Sphere
+			Fsphere& kshere = k->dcast_RenderVisual()->getVisData().sphere;
+			kbox.getsphere(kshere.P, kshere.R);
+		}
+	}
+	
+#ifdef DEBUG_VISBOX
+	Fmatrix box, cent;
+	cent.translate(k->dcast_RenderVisual()->getVisData().sphere.P);
+	box.mul(obj->XFORM(), cent);
+
+	const Fbox& kbox = k->GetBox();
+	Fvector radius;
+	kbox.getradius(radius);
+	CDebugRenderer& render = Level().debug_renderer();
+	render.draw_obb(box, radius, D3DCOLOR_XRGB(0, 255, 0), false);
+#endif
+}
+
+static void update_visbox_hud(IKinematics* k)
+{
+	CHudItem* obj = static_cast<CHudItem*>(k->GetUpdateCallbackParam());
+	if (!obj) return;
+
+	if (k->NeedUCalc())
+	{
+		for (auto& pair : *obj->object().GetAttachments())
+		{
+			script_attachment* att = pair.second;
+			if (att->GetType() != eSA_HUD) continue;
+
+			Fbox Box = att->Box();
+
+			Fmatrix offset;
+			offset.mul(att->BoneTransform(k), att->GetOffset());
+			Box.xform(offset);
+
+			// Update Box
+			Fbox& kbox = const_cast<Fbox&>(k->GetBox());
+			kbox.merge(Box);
+
+			// Update Sphere
+			Fsphere& kshere = k->dcast_RenderVisual()->getVisData().sphere;
+			kbox.getsphere(kshere.P, kshere.R);
+		}
+	}
+	
+#ifdef DEBUG_VISBOX
+	Fmatrix box, cent;
+	cent.translate(k->dcast_RenderVisual()->getVisData().sphere.P);
+	box.mul(obj->HudItemData()->m_item_transform, cent);
+
+	const Fbox& kbox = k->GetBox();
+	Fvector radius;
+	kbox.getradius(radius);
+	CDebugRenderer& render = Level().debug_renderer();
+	render.draw_obb(box, radius, D3DCOLOR_XRGB(100, 100, 0), true);
+#endif
+}
+
+script_attachment* CGameObject::add_attachment(LPCSTR name, script_attachment* att)
 {
 	R_ASSERT(att);
-	remove_attachment(slot, true);
-	m_script_attachments.emplace(mk_pair(slot, att));
+	remove_child(name, true);
+
+	if (!m_script_attachments.size())
+	{
+		add_visual_callback(update_visbox);
+
+#ifdef ATTACHMENT_HUD_VISBOX
+		CHudItem* hud = smart_cast<CHudItem*>(this);
+		if (hud) hud->add_visual_callback(update_visbox_hud);
+#endif
+	}
+
+	m_script_attachments.emplace(mk_pair(name, att));
 	return att;
 }
 
-script_attachment* CGameObject::get_attachment(u16 slot)
+script_attachment* CGameObject::get_attachment(LPCSTR name)
 {
 	if (m_script_attachments.size())
 	{
-		xr_map<u16, script_attachment*>::iterator att = m_script_attachments.find(slot);
+		auto& att = m_script_attachments.find(name);
 		if (att != m_script_attachments.end())
 			return att->second;
 	}
@@ -783,19 +893,49 @@ script_attachment* CGameObject::get_attachment(u16 slot)
 	return nullptr;
 }
 
-void CGameObject::remove_attachment(u16 slot, bool destroy)
+void CGameObject::remove_child(LPCSTR name, bool destroy)
 {
+	script_attachment* attachment = get_attachment(name);
+	if (!attachment)
+		return;
+
+	if (destroy)
+		xr_delete(attachment);
+
+	m_script_attachments.erase(name);
+
+	if (!m_script_attachments.size())
+	{
+		remove_visual_callback(update_visbox);
+
+#ifdef ATTACHMENT_HUD_VISBOX
+		CHudItem* hud = smart_cast<CHudItem*>(this);
+		if (hud) hud->remove_visual_callback(update_visbox_hud);
+#endif
+	}
+}
+
+void CGameObject::remove_attachment(script_attachment* child)
+{
+	if (!child) return;
 	if (m_script_attachments.size())
 	{
-		script_attachment* attachment = get_attachment(slot);
-		if (!attachment)
+		script_attachment* attachment = get_attachment(child->GetName());
+		if (!attachment || attachment != child)
 			return;
 
-		if (destroy)
-			xr_delete(attachment);
-			
-		m_script_attachments.erase(slot);
+		remove_child(child->GetName(), true);
 	}
+}
+
+void CGameObject::iterate_attachments(::luabind::functor<bool> functor)
+{
+	if (!m_script_attachments.size())
+		return;
+
+	for (auto& pair : m_script_attachments)
+		if (functor(pair.first.c_str(), pair.second) == true)
+			return;
 }
 
 /*
@@ -858,22 +998,20 @@ BOOL CGameObject::TestServerFlag(u32 Flag) const
 
 void CGameObject::add_visual_callback(visual_callback* callback)
 {
-	VERIFY(smart_cast<IKinematics*>(Visual()));
+	if (!smart_cast<IKinematics*>(Visual())) return;
 	CALLBACK_VECTOR_IT I = std::find(visual_callbacks().begin(), visual_callbacks().end(), callback);
-	VERIFY(I == visual_callbacks().end());
-
+	if (I != visual_callbacks().end()) return;
 	if (m_visual_callback.empty()) SetKinematicsCallback(true);
-	//		smart_cast<IKinematics*>(Visual())->Callback(VisualCallback,this);
 	m_visual_callback.push_back(callback);
 }
 
 void CGameObject::remove_visual_callback(visual_callback* callback)
 {
+	if (!smart_cast<IKinematics*>(Visual())) return;
 	CALLBACK_VECTOR_IT I = std::find(m_visual_callback.begin(), m_visual_callback.end(), callback);
-	VERIFY(I != m_visual_callback.end());
+	if (I == m_visual_callback.end()) return;
 	m_visual_callback.erase(I);
 	if (m_visual_callback.empty()) SetKinematicsCallback(false);
-	//		smart_cast<IKinematics*>(Visual())->Callback(0,0);
 }
 
 void CGameObject::SetKinematicsCallback(bool set)
@@ -883,11 +1021,18 @@ void CGameObject::SetKinematicsCallback(bool set)
 		smart_cast<IKinematics*>(Visual())->Callback(VisualCallback, this);
 	else
 		smart_cast<IKinematics*>(Visual())->Callback(0, 0);
-};
+}
 
 void VisualCallback(IKinematics* tpKinematics)
 {
-	CGameObject* game_object = static_cast<CGameObject*>(static_cast<CObject*>(tpKinematics->GetUpdateCallbackParam()));
+	if (!tpKinematics) return;
+
+	auto cobj = static_cast<CObject*>(tpKinematics->GetUpdateCallbackParam());
+	if (!cobj) return;
+
+	CGameObject* game_object = static_cast<CGameObject*>(cobj);
+	if (!game_object) return;
+
 	VERIFY(game_object);
 
 	CGameObject::CALLBACK_VECTOR_IT I = game_object->visual_callbacks().begin();
@@ -931,7 +1076,7 @@ void CGameObject::DestroyObject()
 
 void CGameObject::shedule_Update(u32 dt)
 {
-	//уничтожить
+	//СѓРЅРёС‡С‚РѕР¶РёС‚СЊ
 	if (NeedToDestroyObject())
 	{
 #ifndef MASTER_GOLD
@@ -952,7 +1097,7 @@ BOOL CGameObject::net_SaveRelevant()
 	return (CScriptBinder::net_SaveRelevant());
 }
 
-//игровое имя объекта
+//РёРіСЂРѕРІРѕРµ РёРјСЏ РѕР±СЉРµРєС‚Р°
 LPCSTR CGameObject::Name() const
 {
 	return (*cName());
@@ -1138,10 +1283,8 @@ void CGameObject::UpdateCL()
 
 	if (m_script_attachments.size())
 	{
-		xr_map<u16, script_attachment*>::iterator it = m_script_attachments.begin();
-		xr_map<u16, script_attachment*>::iterator it_e = m_script_attachments.end();
-		for (; it != it_e; ++it)
-			(*it).second->Update();
+		for (auto& pair : m_script_attachments)
+			pair.second->Update();
 	}
 
 	if (H_Parent())

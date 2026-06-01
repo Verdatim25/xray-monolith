@@ -5,9 +5,8 @@
 #include		"fhierrarhyvisual.h"
 #include		"../../xrEngine/bone.h"
 #include		"../../Include/xrRender/Kinematics.h"
-
-// consts
-extern xrCriticalSection UCalc_Mutex;
+#include "../../xrEngine/IRenderable.h"
+#include <optional>
 
 // refs
 class CKinematics;
@@ -15,12 +14,7 @@ class CInifile;
 class CBoneData;
 struct SEnumVerticesCallback;
 
-// MT-locker
-struct UCalc_mtlock
-{
-	UCalc_mtlock() { UCalc_Mutex.Enter(); }
-	~UCalc_mtlock() { UCalc_Mutex.Leave(); }
-};
+class IRenderable;
 
 #pragma warning(push)
 #pragma warning(disable:4275)
@@ -120,12 +114,20 @@ public:
 
 public:
 	dxRender_Visual* m_lod;
+
+#ifdef OPTIMIZE_CALCULATE_BONES
+	IC bool canBeOptimized()
+	{
+		return spatialParent && spatialParent->canOptimizeCalculateBones();
+	}
+#endif
+
 protected:
 	SkeletonWMVec wallmarks;
 	u32 wm_frame;
 	u32 CurrentFrame;
-
-	xr_vector<dxRender_Visual*> children_invisible;
+	Fmatrix	Matrix_Prev[2];
+	Fmatrix Matrix_Temp[2];
 
 	// Globals
 	CInifile* pUserData;
@@ -140,6 +142,10 @@ protected:
 	BOOL Update_Visibility;
 	u32 UCalc_Time;
 	s32 UCalc_Visibox;
+	bool UCalc_ThisFrame;
+
+	xrCriticalSection UCalc_Mutex;
+	xrCriticalSection UCalc_Mutex2;
 
 	Flags64 visimask;
 	Flags64 hidden_bones;
@@ -181,8 +187,6 @@ public:
 	u16 _BCL LL_BoneID(LPCSTR B);
 	u16 _BCL LL_BoneID(const shared_str& B);
 	LPCSTR _BCL LL_BoneName_dbg(u16 ID);
-
-	xr_vector<xr_pair<u16, shared_str>> list_bones();
 
 	CInifile* _BCL LL_UserData() { return pUserData; }
 	accel* LL_Bones() { return bone_map_N; }
@@ -290,6 +294,8 @@ public:
 
 	virtual UpdateCallback GetUpdateCallback() { return Update_Callback; }
 	virtual void* GetUpdateCallbackParam() { return Update_Callback_Param; }
+
+	virtual bool NeedUCalc() { return UCalc_ThisFrame; }
 
 	// debug
 #ifdef DEBUG

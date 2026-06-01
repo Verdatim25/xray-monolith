@@ -25,7 +25,7 @@ Here is list of exe files for Anomaly 1.5.3 that contains all engine patches by 
   * Install modded exes following the instructions above
 
 * Q: The game crashes on DX11 Fullscreen on Linux
-* A: You need to add `--dxgi-old` parameter into `commandline.txt` file or via making a shotcut to exe and adding argument there
+* A: You need to add `--dxgi-old` parameter into `commandline.txt` file or via making a shortcut to exe and adding argument there
 
 * Q: I have conflicts, crashes and bugs with shaders when i use Beef NVG, SSS, or Enhanced Shaders
 * A: If you are using those mods, install this package via MO2, and put it higher priority than those mods: https://github.com/deggua/xray-hdr10-shaders/releases/latest
@@ -46,7 +46,7 @@ The original engine is used in S.T.A.L.K.E.R. Call of Pripyat game released by G
   * Attempting to override sections no longer crash the game, but prints the message into the log. All sections that triggers that error will be printed
   * Duplicate section errors now prints the root file where the error happened for easier checking mod_... ltxes
   * DLTX received possibility to create section if it doesn't exists and override section if it does with the same symbol `@`.
-  Below is the example for `newsection` that wasn't defined. Firstly its created with one param `override = false`, then its overriden with `override = true`
+  Below is the example for `newsection` that wasn't defined. Firstly its created with one param `override = false`, then its overridden with `override = true`
 
   ```
   @[newsection]
@@ -87,29 +87,20 @@ The original engine is used in S.T.A.L.K.E.R. Call of Pripyat game released by G
   * For unlocalizing a variable in the script, please refer to documentation in test file in `gamedata/configs/unlocalizers` folder
 
 * Doppler effect of sounds based on code by Cribbledirge and edited by demonized.
-* True First Person Death Camera, that will stay with player when he dies and will react accordingly to player's head transforms, with possibility to adjust its settings.
+* True First Person Death Camera, that will stay with player when he dies and will react accordingly to player's head position and rotation, with possibility to adjust its settings.
   * Known bugs:
     * If the player falls with face straight into the ground, the camera will clip underground due to model being clipped as well with
 
-* Pseudogiant stomps now can kill and damage any object, stalker or mutant, instead of only actor, configurable via console commands
-
-* In case of missing translation for a string, the engine will fallback to english text for this string.
+* Optional gameplay enhancements
 
 * Additional functions and console commands described in `lua_help_ex.script`
 
 * Additional callbacks described in `callbacks_gameobject.script`
 
 * Additional edits and bugfixes by demonized
-  * Restored "Fatal Error" MessageBox popup in case of encountering fatal engine errors like it was on Windows 7 or lower
-  * In case of typical first person model/animation errors, the game will print the section that has defined model
-  * MAX_TRIS const increased from 1024 to 16384
-  * Enabled death animations for CWeaponAutomaticShotgun class
-  * Fixed sorting news in News Tab in PDA
-  * Added getting material of ray_pick() result with all of its properties
-  * Potential fix for stuck monsters from OGSR Engine repo in `control_animation_base_accel.cpp`
-  * Removed maximum engine limit of 5 artefacts on belt
-  * Added printing of engine stack trace in the log via StackWalker library https://github.com/JochenKalmbach/StackWalker
-   * To make it work you need to download `pdb` file for your DX/AVX version and put it into same place as `exe` file. PDB files are here: https://github.com/themrdemonized/xray-monolith/releases/latest
+  
+* Added printing of engine stack trace in the log via StackWalker library https://github.com/JochenKalmbach/StackWalker
+ * To make it work you need to download `pdb` file for your DX/AVX version and put it into same place as `exe` file. PDB files are here: https://github.com/themrdemonized/xray-monolith/releases/latest
 
 * Fixes and features by Lucy
   * Reshade shaders won't affect UI, full addon support version of Reshade is required (see TROUBLESHOOTING for details)
@@ -145,24 +136,16 @@ The original engine is used in S.T.A.L.K.E.R. Call of Pripyat game released by G
   * Ability to autosave the game before crash occurs, can be disabled with console command `crash_save 0` and enabled with `crash_save 1`. Maximum amount of saves can be specified with command `crash_save_count <number>`, where number is between 0 to 20 (default is 10)
 
 * Smooth Particles with configurable update rate by vegeta1k95
-  * To change update rate use console command `particle_update_mod` which takes values from 0.04 to 10.0 (default is 1.0). 1.0 corresponds to 30hz, 0.5 - 60hz and so on. The setting is also available in the options menu in "Modded Exes" group
   * Possibility to set particle update delta in milliseconds in .pe files for fine tuning with `update_step` field
 
-* Shader Scopes by CrookR and enhanced by Edzan, comes ready to use in the archive, delete old version first
+* Shader Scopes by CrookR and enhanced by Edzan, integrated into Modded Exes
 
-  * Dynamic zoom is disabled by default for alternative sights (can be enabled by adding scope_dynamic_zoom_alt = true to the weapon section). For example, if you take SVD Lynx or SVD PMC with March Tactical (or other sights with adjustable zoom) and switch to alternate sight, they wont have dynamic zoom anymore
-  * Possibility to set alternative sight crosshair and zoom_factor with `scope_texture_alt = <path to texture>` and `scope_zoom_factor_alt = <number>` parameters in weapon ltx
-  * The main sights with dynamic zoom and binoculars now normally remember their state.
-  * Added console command sds_enable [on (default)/off] to enable/disable Shader Based 2D Scopes.
-  * Added sds_speed_enable [on (default)/off] console command to disable/enable mouse speed (sensitivity) effect of scope_factor when aiming.
-  * Added console command sds_zoom_enable [on (default)/off] with which you can disable /enable correction of max. zoom with scope_factor, if this option is enabled then max. zoom will be such as prescribed in settings regardless of scope_factor value, if this option is disabled then max. zoom will be sum of value prescribed in settings and the increase that gives scope_factor.
+* OpenAL 1.23.1 with support for EFX, working sound environments from IX-Ray Engine
 
-  Above mentioned options are applicable only for scopes which have prescribed values in file scoperadii.script
+* Commits from IX-Ray Engine: https://github.com/ixray-team/ixray-1.6-stcop
 
-  * Added alternative zoom control (toggle with new_zoom_enable [on/off (default)]
-    * Minimal zoom is equal to either mechanical zoom or the one prescribed in section min_scope_zoom_factor.
-    * The step of zoom adjustment is more precise. Also, it's possible to adjust the step of zoom with the console command zoom_step_count [1.0, 10.0], this option is also applicable to the binoculars.
-  * In the new version all implementations from fakelens.script have moved directly to the engine. fakelens.script remained as a layer between the engine and scopeRadii.script
+<!----><a name="script_debugger_instructions"></a>
+* Debug scripts with VSCode and LuaPanda, support by IX-Ray Platform. How to use it: https://anomaly-modding-book.netlify.app/docs/tutorials/addons/lua-debugger
 
 * All settings can be edited from the game options in "Modded Exes" tab
 ![image](http://puu.sh/JC40Y/9315119150.jpg)
@@ -178,14 +161,374 @@ The original engine is used in S.T.A.L.K.E.R. Call of Pripyat game released by G
 ## How to make my own modded exe?
 
 How to compile exes:
-1. Fork this xray-monolith
-2. Clone the fork onto your pc
-3. Select all-in-one-vs2022-wpo branch
+1. Fork this xray-monolith repo, the main branch is `all-in-one-vs2022-wpo`
+2. Download the fork onto your pc
+3. Open Git Bash or terminal in the downloaded folder and run `git submodule update --init --recursive` to pull git submodules
 4. Compile the engine-vs2022.sln solution with VS2022
-5. For batch builds of all configurations use `batch_build.bat` in xray-monolith repo
+5. For batch builds of all configurations use `batch_build.bat`
 6. For successful compilation, **the latest build tools with MFC and ATL libraries is required**
 
 ## Changelog
+**2025.09.15**
+* Various Luabind fixes and improvements
+* Simplify `script_callback_ex` templates
+* Fix `PHItemList` compile warning
+* SaloEater: Update link to new wiki (https://github.com/themrdemonized/xray-monolith/pull/372)
+
+**2025.09.12**
+* OXR: Replace shared_str with xr_string for log and fs, fixed https://github.com/themrdemonized/xray-monolith/issues/366
+* Fix https://github.com/themrdemonized/xray-monolith/issues/369
+
+**2025.09.10**
+* ProfLander: Fix CALifeMonsterBrain::process_task segfault (https://github.com/themrdemonized/xray-monolith/pull/364)
+
+**2025.09.06**
+* Replaced luabind with non-Boost version (https://github.com/ixray-team/ixray-1.6-stcop/commit/2f61f5f781130468c945720b76d23ce4bbea95b1)
+* Disable `std::terminate` in luabind (https://github.com/ixray-team/ixray-1.6-stcop/commit/723fb65a8b9ebb89dda8f03cbb4b1bebceabacdc)
+* Removed Boost library
+* Added nullptr check in `CMonsterCorpseMemory::add_corpse`
+* LVutner:
+  * ADD: [Render] Added missing s_position samplers (https://github.com/themrdemonized/xray-monolith/pull/358)
+  * UPD: [Render] r_ComputePass fix (https://github.com/themrdemonized/xray-monolith/pull/359)
+
+**2025.08.30**
+* MFB: Smart covers now have fixed enter min/max distances (https://github.com/themrdemonized/xray-monolith/pull/352)
+* Lucy: Level Script Attachments (https://github.com/themrdemonized/xray-monolith/pull/353)
+* ProfLander: ImGui: Implement grouping API (https://github.com/themrdemonized/xray-monolith/pull/354)
+
+**2025.08.27**
+* Fix https://github.com/themrdemonized/xray-monolith/issues/346
+* NLTP_Ashes:
+  * Export multiple CWeaponKnife related functions to Lua (https://github.com/themrdemonized/xray-monolith/pull/347)
+  * Export HUD elements to Lua (https://github.com/themrdemonized/xray-monolith/pull/351)
+* Ncenka: Fix for Random Music in Main Menu (https://github.com/themrdemonized/xray-monolith/pull/345)
+
+**2025.08.23**
+* Kutez: Callback Priority System (https://github.com/themrdemonized/xray-monolith/pull/339)
+* Ncenka: PDA UI XML Setter (https://github.com/themrdemonized/xray-monolith/pull/343)
+
+**2025.08.21**
+* GhenTuong:
+  * CCar CWeaponStatMgun changes (https://github.com/themrdemonized/xray-monolith/pull/310)
+  * Export API functions and minor improvements (https://github.com/themrdemonized/xray-monolith/pull/340)
+* Antglobes: Sun values (https://github.com/themrdemonized/xray-monolith/pull/341)
+
+**2025.08.19**
+* Removed `parallel_for` in HOM and `particle_actions_collection` in favor of single-threaded loop for less thread creation overhead
+* Replace `unordered_map` implementation to `unordered_node_map`, same with set
+* Removed double loop in volumetric lights code
+* Disabled update of actor stamina while driving cars (https://github.com/ixray-team/ixray-1.6-stcop/commit/6c1ad01adffba180df8f47a58f33e66e69def949)
+* Fix crash when NPC trying use destroyed object (https://github.com/ixray-team/ixray-1.6-stcop/commit/d34966c3e255568f60df7bd0e33d61bebfe98afa)
+* ProfLander: Add string count to stat_memory and OOM handler (https://github.com/themrdemonized/xray-monolith/pull/337)
+* Kutez: Added the new "volume_mult" property for HUD sound call back. Removed all indoor framework related engine side code (https://github.com/themrdemonized/xray-monolith/pull/338)
+
+**2025.08.12u1**
+* Fix issue https://github.com/themrdemonized/xray-monolith/issues/333
+* v2v3v4: fix ctd when zooming into about to be destroyed object with detector scopes
+
+**2025.08.12**
+* Fix issue https://github.com/themrdemonized/xray-monolith/issues/332
+
+**2025.08.11**
+* Small reorganization of 3rd party files
+* `g_interrupt_fire_on_aim_toggle` cvar to set stop firing when pressed aim, default enabled addresses issue https://github.com/themrdemonized/xray-monolith/issues/327
+* v2v3v4: update all sound positions at once
+* ProfLander: Launchers: Cartridge Ammo + Trajectory and Reload Options (https://github.com/themrdemonized/xray-monolith/pull/322)
+* VodoXleb: Add `binoculars_dynamic_zoom_check` cvar for new Binoc zoom, default disabled (https://github.com/themrdemonized/xray-monolith/pull/328), addresses issue https://github.com/themrdemonized/xray-monolith/issues/325
+* Lucy: Fix lua function to get/set shaders and textures of models (https://github.com/themrdemonized/xray-monolith/pull/329)
+* LVutner:
+  * Removed useless DSVs... (https://github.com/themrdemonized/xray-monolith/pull/330)
+  * Possible fix for corrupted CBuffers [r_ComputePass] (https://github.com/themrdemonized/xray-monolith/pull/331)
+
+**2025.08.09**
+* Replace `smart_cast` with fast_dynamic_cast library (https://github.com/ixray-team/ixray-1.6-stcop/commit/2197a168bbd700f64df0fbcb5f0139a289a39102)
+* Convert LuaJIT NMake to VS2022 project (https://github.com/themrdemonized/xray-monolith/pull/323)
+* Reduced .pdb size
+
+**2025.08.07**
+* VodoXleb: Add scope_dynamic_zoom = off for binoculars
+* Ncenka: Dynamic Devices turn on/off (https://github.com/themrdemonized/xray-monolith/pull/318)
+
+**2025.08.04**
+* Debug renderer supports strings as ids for primitives
+* Moved new ammo aggregation script into item_weapon, directly replacing the old implementation
+
+**2025.08.01**
+* Fixed missing `ik_calc_ssa` setting in Modded Exes menu
+* Fixed crash with certain mods that misuse ammo aggregation function
+
+**2025.07.31**
+* Use x64 toolchain for compiling
+* Orleonn: Lua export: CUIDialogWnd::AllowWorkInPause and render_device:pause_ex (https://github.com/themrdemonized/xray-monolith/pull/308)
+* NLTP_ASHES: Add fail-safe in CGameObject::net_Spawn to try to update a missing model (https://github.com/themrdemonized/xray-monolith/pull/311)
+
+**2025.07.29**
+* Bone calc optimizations
+  * Usage of Screen Space Area (SSA) instead of distance check, works better with larger objects such as pseudogiants
+  * `ik_calc_ssa` cvar to control the optimization strength, default is 0.006
+* Reduced trader update radius 100 -> 30
+* `bullet_on...` callbacks received `bullet.element` field. When bullet hits alife object, element will be a bone id. If its static geometry, then it will be a geometry triangle number. -1 if there was no hit.
+* New ammo aggregation function, waits for game objects to be online and a different algorithm. Probably fixes https://github.com/themrdemonized/xray-monolith/issues/118
+
+**2025.07.27**
+* Lucy: Model Visbox Update and Script Attachment Fixes (https://github.com/themrdemonized/xray-monolith/pull/306)
+
+**2025.07.26**
+* Nearby traders' inventory will be updated in advance
+* Sound:
+  * Updated OpenAL version to 1.23.1
+  * Integration of OpenAL EFX extensions, `snd_efx` works now (https://github.com/ixray-team/ixray-1.6-stcop/commit/e429c13023261623b5260c8e85b588d6d8535e44)
+  * Added some sound environments where they were appropriate from (https://www.moddb.com/mods/doctorx-call-of-the-zone/addons/dead-air-spatial-sound-and-reverb).
+  * Not all maps were added from that mod. If you want all of them, download it separately. Maps that have sound environments:
+    * Underground maps
+    * Swamps
+    * Dark Valley
+    * Rostok
+    * Brain Scorcher
+    * Red Forest
+    * Hospital
+    * Pripyat Outskirts
+  * `snd_efx_environment_change_time` to change interpolation time between sound environments on a map, default 1.66 seconds
+
+**2025.07.23**
+* Various bug fixes and crash fixes
+* ZoulKrystal: Gasmask performance edit and ltx aim fov (https://github.com/themrdemonized/xray-monolith/pull/304)
+
+**2025.07.20**
+* Fixed flickering bones when using `mt_update_weapon_sounds`
+* VodoXleb: Callback for GAME path build fail (https://github.com/themrdemonized/xray-monolith/pull/301)
+
+**2025.07.19**
+* Optimizations
+  * Updates to weapon sound positions moved to separate frame, can be toggled with `mt_update_weapon_sounds` cvar, default on. Slight performance gain depending on the amount of weapon game objects
+  * Calculating bones optimization will be engaged only after fully loading the level
+* Gameplay
+  * Optional progressive stamina drain, stamina usage linearly depends on current weight instead of hard cutoff point, cvar `g_progressive_stamina_cost`, default off
+  * Fix crows AI fly target position (https://github.com/ixray-team/ixray-1.6-stcop/commit/4e7de9844c1906749bb519f9c6ce350f42f02dea)
+  * NPCs will turn their heads to look at actor when upclose (https://github.com/ixray-team/ixray-1.6-stcop/commit/e55a85f0d5b719e3cd9ce23ca7976b0ca2124b08)
+    * cvar `g_npcs_look_at_actor` to enable the feature, default on
+    * cvar `g_npcs_look_at_actor_min_distance` to control minimum distance when they start to look, default 3.5
+    * callback `npc_on_before_look_at_actor` to control the behaviour of npcs
+* Fixed https://github.com/themrdemonized/xray-monolith/issues/296
+* VodoXleb: Fix `_G.get_object_squad` error (https://github.com/themrdemonized/xray-monolith/pull/299)
+
+**2025.07.16**
+* Fixed crash due to not clearing pointer to deleted IRenderable in bones calculations
+
+**2025.07.15**
+* Reducing updates of bones calculations instead of disabling them, fixes issues with T-posing corpses
+
+**2025.07.14**
+* DLTX: Allow DLTX's `>` to create the property if it doesn't exist (https://github.com/themrdemonized/xray-monolith/issues/289)
+* Optimizations:
+  * Skeleton models outside of view frustum won't have bones calculations, less CPU load
+  * Additionally `r__optimize_calculate_bones` cvar allows to disable calculations for far away objects (default enabled)
+  * `ik_calc_dist` acts as a distance, over which calculations stop (default 100)
+  * `ik_always_calc_dist` is a distance, under which models will perform calculations even when not in frustum (default 20)
+  * In heavily populated maps with loads of entities expect around 2ms less frame time if you are bound by CPU
+* Sound:
+  * Added distance based delay according to the normal 343m/s speed of sound. Console variables to tweak:
+    * `snd_distance_based_delay_power` controls the delay strength. 0 will disable delay. Default 1
+    * `snd_distance_based_delay_min_distance` controls minimum distance in meters to start noticing the delay. Default 50
+  * Added optional pitch variation to sounds. Every time the sound is played it will have slightly different pitch. `snd_pitch_variation_power` controls the variation strength. Default 0
+
+**2025.07.12**
+* lulnope: expose `memory_remove_links` to lua scripts
+
+**2025.07.08**
+* Spawn antifreeze: fixed issue related to bolts, introduced in previous version: https://github.com/themrdemonized/xray-monolith/issues/287
+* SaloEater: Debug scripts with luapanda (https://github.com/themrdemonized/xray-monolith/pull/251)
+
+**2025.07.06**
+* Spawn antifreeze:
+  * Added `mod_system_spawn_antifreeze_ignore.ltx` file, lines in that file are sections that won't be processed by antifreeze. Partially addresses issue https://github.com/themrdemonized/xray-monolith/issues/283
+  * Fixed CTD on a possible condition when trying to spawn child items while parent is already destroyed and not exists in ALife, fixes issue https://github.com/themrdemonized/xray-monolith/issues/284
+* Replaced all occurences of `luabind` to `::luabind`
+* Migrated projects to C++17 standard
+
+**2025.07.05**
+* Ascii1457: SSS 23.2 Update
+
+**2025.07.03**
+* Ascii1457: SSS 23.1 Update
+
+**2025.07.02**
+* Spawn Antifreeze: Don't prefetch helicopters, might fix issue https://github.com/themrdemonized/xray-monolith/issues/278
+
+**2025.07.01**
+* `hanging_lamp_ignore_match_configuration` cvar to circumvent the SSS23 + HF crash, related to https://github.com/themrdemonized/xray-monolith/issues/273
+* Fix https://github.com/themrdemonized/xray-monolith/issues/276
+
+**2025.06.30**
+* Disable printing DLTX `!` warnings by default, toggle it with `print_dltx_warnings 1` cvar
+* Lua GC step increased to 300
+* OneMorePseudoCoder:
+  * Don't apply rendering optimizations to cars and helicopters (https://github.com/themrdemonized/xray-monolith/pull/271)
+  * Fix npc footsteps (https://github.com/themrdemonized/xray-monolith/pull/274)
+
+**2025.06.28**
+* Fixed crash to desktop in updateDiscordPresence function due to race condition
+* Spawn antifreeze: do not prefetch G_RPG7 and G_FAKE objects, fixes "incorrect destroy sequence for object" error
+* Ascii1457: SSS 23 Update
+* LVutner: R11G11B10_FLOAT support
+
+**2025.06.27**
+* Disabled initial script prefetches, conflict with SSS
+
+**2025.06.26**
+* Spawn antifreeze: Fixed some random crashes to desktop due to race condition in shader creation
+* LVutner: [Render] PIXEVENTs. Thanks to forserx and frowik
+
+**2025.06.24**
+* Hotfixes:
+  * Spawn antifreeze: Fixed crashing to desktop if model hasn't been found for prefetching
+  * Dynamic news manager: Check if the type of stuff in loot table is actual object, fixes crashes with existing moddb fixes
+* Fixed "overriding /ob2 with /ob3" warning when building
+* Fixed issue https://github.com/themrdemonized/xray-monolith/issues/267
+
+**2025.06.23**
+* Optimization pass:
+  * Spawn Antifreeze: put offloading model and texture resources into separate thread before spawning entities. Enabled by default. If you notice some issues, please report them and turn it off in console `spawn_antifreeze 0` (https://github.com/themrdemonized/xray-monolith/pull/257)
+  * Move Discord update into separate thread
+  * Fixed `trans_outfit.transparent_gg()` function having whole alife loop, now using only game objects
+  * Fix Dynamic News Manager loot table containing possible destroyed objects, leading to busy hands
+  * Changed Lua garbage collection step 400 -> 160
+* Moved project files outside of vs2022 folder, refactor solution file. Should fix broken precompiled headers
+* ProfLander: Integrate optick profiler (https://github.com/themrdemonized/xray-monolith/pull/262)
+
+**2025.06.20**
+* Updated Github Action to use `softprops/action-gh-release`
+* [Feature Request] Added an option to invert Mouse Wheel when changing weapons (https://github.com/themrdemonized/xray-monolith/issues/261)
+* ProfLander: 3D Ballistics Fixes (https://github.com/themrdemonized/xray-monolith/pull/259)
+* Kutez: Update v3 Indoor Gunsound Framework (https://github.com/themrdemonized/xray-monolith/pull/260)
+
+**2025.06.18**
+* Lucy: Script Attachment 3D UI Scale/Origin (https://github.com/themrdemonized/xray-monolith/pull/258)
+
+**2025.06.15**
+* Lucy: Some more changes (https://github.com/themrdemonized/xray-monolith/pull/254)
+
+**2025.06.11**
+* Lucy: ImGui implementation with script support (https://github.com/themrdemonized/xray-monolith/pull/250)
+
+**2025.06.09**
+* NLTP_ASHES: Exported `_keyboard`'s `key_name` and `key_local_name` to Lua (https://github.com/themrdemonized/xray-monolith/pull/248)
+
+**2025.06.08**
+* NLTP_ASHES: Add `actor_on_death` callback (https://github.com/themrdemonized/xray-monolith/pull/244)
+
+**2025.06.05**
+* The engine will crash if override sound failed to be initialised in `_G.COnBeforePlayHudSound` callback
+* ProfLander: Fix black default crosshair (https://github.com/themrdemonized/xray-monolith/pull/242)
+* NLTP_ASHES: Implement SetHudMode on CScriptParticles and CParticlesObject (https://github.com/themrdemonized/xray-monolith/pull/243/files)
+
+**2025.06.03**
+* NLTP_ASHES: Export color animation functions & implemented RemoveColorAnimation (https://github.com/themrdemonized/xray-monolith/pull/241)
+
+**2025.05.29**
+* lulnope: Fix popup positioning for tall popups in tasks/map tab of PDA (https://github.com/themrdemonized/xray-monolith/pull/237)
+
+**2025.05.26**
+* Fixed and cleaned up Modded Exes options
+* Lucy: Script Attachment improvements (https://github.com/themrdemonized/xray-monolith/pull/234)
+
+**2025.05.24**
+* NLTP_ASHES: Export CurrentGameUI()->m_pMessagesWnd to Lua (https://github.com/themrdemonized/xray-monolith/pull/233)
+
+**2025.05.23**
+* damoldavskiy: Procedural move animations (https://github.com/themrdemonized/xray-monolith/pull/230)
+
+**2025.05.19**
+* damoldavskiy: MAS: min zoom handling (https://github.com/themrdemonized/xray-monolith/pull/228)
+
+**2025.05.16**
+* Fixed `get_ui_position` function for script attachments
+* ProfLander:
+  * Multiple crosshairs (https://github.com/themrdemonized/xray-monolith/pull/224)
+  * Implement `g_aimpos_zoom` (https://github.com/themrdemonized/xray-monolith/pull/226)
+  * Use correct trace for `g_get_target_position origin` and direction (https://github.com/themrdemonized/xray-monolith/pull/227)
+
+**2025.05.12**
+* NLTP_ASHES: Expose CUIProgressBar's m_UIProgressItem to LUA (https://github.com/themrdemonized/xray-monolith/pull/225)
+
+**2025.05.10**
+* added ScrollView instance in `on_news_received` callback
+* Lucy:
+  * Script attachments now use strings instead of IDs (https://github.com/themrdemonized/xray-monolith/pull/221)
+  * [ReShade] Fix crash in fullscreen mode (https://github.com/themrdemonized/xray-monolith/pull/223)
+* Lander: Expose wallmark range via options menu (https://github.com/themrdemonized/xray-monolith/pull/222)
+
+**2025.05.07**
+* Upgrade bug fix for MAS (https://github.com/themrdemonized/xray-monolith/pull/219)
+
+**2025.05.06**
+* `get_console():get_variable_bounds(cvar)` function to get bounds of cvar
+* damoldavskiy:
+  * MAS scope spawn fix (https://github.com/themrdemonized/xray-monolith/pull/217)
+* ProfLander:
+  * Fix scriptable near-wall jitter (https://github.com/themrdemonized/xray-monolith/pull/213)
+  * Implement g_aimpos to govern bullet direction (https://github.com/themrdemonized/xray-monolith/pull/214)
+  * Improved categorization and definition machinery for settings menu (https://github.com/themrdemonized/xray-monolith/pull/215)
+
+**2025.05.03**
+* `ray_pick:query()` will clear previous query result
+* GhenTuong: Merge force-body-state, axr_beh improvements, vignette_control (https://github.com/themrdemonized/xray-monolith/pull/209)
+* ProfLander:
+  * Improved reticle interpolation (https://github.com/themrdemonized/xray-monolith/pull/206)
+  * Crosshair Sizing Fixes Again (https://github.com/themrdemonized/xray-monolith/pull/210)
+
+**2025.05.01**
+* `g_draw_pickup_item_names` cvar for disabling item names on holding key (https://github.com/themrdemonized/xray-monolith/issues/191)
+* ProfLander: 
+  * Fix logspam in CWeapon::GetNearWallOffset (https://github.com/themrdemonized/xray-monolith/pull/192)
+  * Fix option defaults for firepos settings (https://github.com/themrdemonized/xray-monolith/pull/193)
+  * Fix crosshair readout jitter (https://github.com/themrdemonized/xray-monolith/pull/194)
+  * Crosshair: Far size option (https://github.com/themrdemonized/xray-monolith/pull/197)
+  * Lua trace API improvements (https://github.com/themrdemonized/xray-monolith/pull/198)
+  * Fix animated HUD FOV (https://github.com/themrdemonized/xray-monolith/pull/199)
+  * Scriptable Nearwall (https://github.com/themrdemonized/xray-monolith/pull/201)
+  * Add 'Always Show Crosshair' option (https://github.com/themrdemonized/xray-monolith/pull/203)
+* VodoXleb:  Callback to force set NPC body_state (https://github.com/themrdemonized/xray-monolith/pull/202)
+
+**2025.04.28**
+* Possibility to set multiple objects to ignore for `ray_pick` via multiple `set_ignore_object` calls: 
+  ```lua
+    ray:set_ignore_object(obj_1)
+    ray:set_ignore_object(obj_2)
+    ...
+  ```
+* ProfLander: Implement g_firepos (https://github.com/themrdemonized/xray-monolith/pull/190)
+
+**2025.04.27**
+* Removed duplicate stack traces on Lua-related CTD
+* `obj:bounding_box(bool bHud)` method to get bounding box of an object
+* ProfLander:
+  * Shader-Based Crosshair (https://github.com/themrdemonized/xray-monolith/pull/183)
+  * Positional Near-Wall Offset (https://github.com/themrdemonized/xray-monolith/pull/186)
+
+**2025.04.25**
+* `game.ui2world_offscreen(pos)` function for unprojecting from ui coordinates outside of screen
+* Additional vector exports:
+  * static functions:
+    * `vector.generate_orthonormal_basis(Fvector dir, Fvector up, Fvector right)`
+    * `vector.generate_orthonormal_basis_normalized(Fvector dir, Fvector up, Fvector right)`
+  * `function project(Fvector u, Fvector v)`
+  * `function project(Fvector v)`
+* Additional matrix exports:
+  * `function transform(Fvector, Fvector)`
+  * `function transform(Fvector)`
+  * `function transform_tiny(Fvector, Fvector)`
+  * `function transform_tiny(Fvector)`
+  * `function transform_dir(Fvector, Fvector)`
+  * `function transform_dir(Fvector)`
+  * `function hud_to_world()`
+  * `function world_to_hud()`
+* Kutez: Update v0.3 Indoor Gunsound Framework (https://github.com/themrdemonized/xray-monolith/pull/176)
+* ProfLander:
+  * HUD <-> World Transforms (https://github.com/themrdemonized/xray-monolith/pull/179)
+  * Fix weapon particle projection in third-person (https://github.com/themrdemonized/xray-monolith/pull/180)
+  * Reduce code duplication in bone_position / bone_direction (https://github.com/themrdemonized/xray-monolith/pull/182)
+
 **2025.04.22**
 * `on_before_play_hud_sound` callback, possibility to override hud sound with another one
 * `obj:bone_transform` functions to get transform matrix of a bone
@@ -1192,4 +1535,3 @@ override = true
 
 * Exported distance_to_xz_sqr() function of Fvector
 * Redesigned duplicate section error, it will additionally print what file adds the section in the first place in addition to the file that has the duplicate
-

@@ -48,6 +48,7 @@
 #include "Pda.h"
 #include "player_hud.h"
 #include "script_attachment_manager.h"
+#include "CustomDevice.h"
 
 class CScriptBinderObject;
 
@@ -89,6 +90,18 @@ Fmatrix CScriptGameObject::Xform(bool bHud)
 	}
 
 	return *xform;
+}
+
+Fbox CScriptGameObject::bounding_box(bool bHud)
+{	
+	if (bHud)
+	{
+		CHudItem* itm = smart_cast<CHudItem*>(&object());
+		if (itm)
+			return itm->HudItemData()->m_model->dcast_RenderVisual()->getVisData().box;
+	}
+
+	return object().BoundingBox();
 }
 
 BIND_FUNCTION10(&object(), CScriptGameObject::Position, CGameObject, Position, Fvector, Fvector());
@@ -261,6 +274,18 @@ CHolderCustom* CScriptGameObject::get_custom_holder()
 	return holder;
 }
 
+#ifdef HOLDERCUSTOM_NEW
+CScriptGameObject *CScriptGameObject::get_holder_owner()
+{
+	CHolderCustom *holder = smart_cast<CHolderCustom *>(&object());
+	if (!holder)
+	{
+		ai().script_engine().script_log(ScriptStorage::eLuaMessageTypeError, "CGameObject : it is not a holder!");
+	}
+	return (holder && holder->Owner()) ? holder->Owner()->lua_game_object() : nullptr;
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
@@ -396,92 +421,6 @@ u16 CScriptGameObject::bone_id(LPCSTR bone_name, bool bHud)
 	return bone_id;
 }
 
-Fvector CScriptGameObject::bone_position(u16 bone_id, bool bHud)
-{
-	//if (bone_id == BI_NONE) return Fvector().set(0, 0, 0);
-
-	IKinematics* k = nullptr;
-	Fmatrix* xform = nullptr;
-
-	if (bHud)
-	{
-		CActor* act = smart_cast<CActor*>(&object());
-		CHudItem* itm = smart_cast<CHudItem*>(&object());
-		if (itm)
-		{
-			k = itm->HudItemData()->m_model;
-			xform = &itm->HudItemData()->m_item_transform;
-		}
-		else if (act)
-		{
-			k = (bone_id > 20) ? g_player_hud->m_model->dcast_PKinematics() : g_player_hud->m_model_2->dcast_PKinematics();
-			xform = (bone_id > 20) ? &g_player_hud->m_transform : &g_player_hud->m_transform_2;
-		}
-	} else {
-		k = object().Visual()->dcast_PKinematics();
-		xform = &object().XFORM();
-	}
-
-	if (!k) return Fvector().set(0, 0, 0);
-
-	// demonized: backwards compatibility with scripts, get root bone if bone_id is BI_NONE
-	if (bone_id == BI_NONE) {
-		if (strstr(Core.Params, "-dbg") && print_bone_warnings) {
-			Msg("![bone_position] Incorrect bone_id provided for %s (%d), fallback to root bone", object().cNameSect_str(), object().ID());
-			ai().script_engine().print_stack();
-		}
-		bone_id = k->LL_GetBoneRoot();
-	}
-
-	Fmatrix matrix;
-	matrix.mul_43(*xform, k->LL_GetTransform(bone_id));
-	return (matrix.c);
-}
-
-Fvector CScriptGameObject::bone_direction(u16 bone_id, bool bHud)
-{
-	//if (bone_id == BI_NONE) return Fvector().set(0, 0, 0);
-
-	IKinematics* k = nullptr;
-	Fmatrix* xform = nullptr;
-
-	if (bHud)
-	{
-		CActor* act = smart_cast<CActor*>(&object());
-		CHudItem* itm = smart_cast<CHudItem*>(&object());
-		if (itm)
-		{
-			k = itm->HudItemData()->m_model;
-			xform = &itm->HudItemData()->m_item_transform;
-		}
-		else if (act)
-		{
-			k = (bone_id > 20) ? g_player_hud->m_model->dcast_PKinematics() : g_player_hud->m_model_2->dcast_PKinematics();
-			xform = (bone_id > 20) ? &g_player_hud->m_transform : &g_player_hud->m_transform_2;
-		}
-	} else {
-		k = object().Visual()->dcast_PKinematics();
-		xform = &object().XFORM();
-	}
-
-	if (!k) return Fvector().set(0, 0, 0);
-
-	// demonized: backwards compatibility with scripts, get root bone if bone_id is BI_NONE
-	if (bone_id == BI_NONE) {
-		if (strstr(Core.Params, "-dbg") && print_bone_warnings) {
-			Msg("![bone_direction] Incorrect bone_id provided for %s (%d), fallback to root bone", object().cNameSect_str(), object().ID());
-			ai().script_engine().print_stack();
-		}
-		bone_id = k->LL_GetBoneRoot();
-	}
-
-	Fmatrix matrix;
-	Fvector res;
-	matrix.mul_43(*xform, k->LL_GetTransform(bone_id));
-	matrix.getHPB(res);
-	return (res);
-}
-
 Fmatrix CScriptGameObject::bone_transform(u16 bone_id, bool bHud)
 {
 	//if (bone_id == BI_NONE) return Fvector().set(0, 0, 0);
@@ -521,6 +460,19 @@ Fmatrix CScriptGameObject::bone_transform(u16 bone_id, bool bHud)
 	Fmatrix matrix;
 	matrix.mul_43(*xform, k->LL_GetTransform(bone_id));
 	return matrix;
+}
+
+Fvector CScriptGameObject::bone_position(u16 bone_id, bool bHud)
+{
+	return bone_transform(bone_id, bHud).c;
+}
+
+Fvector CScriptGameObject::bone_direction(u16 bone_id, bool bHud)
+{
+	Fmatrix matrix = bone_transform(bone_id, bHud);
+	Fvector res;
+	matrix.getHPB(res);
+	return res;
 }
 
 u16 CScriptGameObject::bone_parent(u16 bone_id, bool bHud)
@@ -618,9 +570,9 @@ bool CScriptGameObject::is_bone_visible(u16 bone_id, bool bHud)
 }
 
 // demonized: list all bones
-luabind::object CScriptGameObject::list_bones(bool bHud)
+::luabind::object CScriptGameObject::list_bones(bool bHud)
 {
-	luabind::object result = luabind::newtable(ai().script_engine().lua());
+	::luabind::object result = ::luabind::newtable(ai().script_engine().lua());
 	IKinematics* k = nullptr;
 
 	if (bHud)
@@ -637,9 +589,9 @@ luabind::object CScriptGameObject::list_bones(bool bHud)
 
 	if (!k) return result;
 
-	auto bones = k->list_bones();
-	for (const auto& bone : bones)
-		result[bone.first] = bone.second.c_str();
+	auto bones = k->LL_Bones();
+	for (const auto& bone : *bones)
+		result[bone.second] = bone.first.c_str();
 
 	return result;
 }
@@ -650,6 +602,14 @@ luabind::object CScriptGameObject::list_bones(bool bHud)
 
 u32 CScriptGameObject::GetAmmoElapsed()
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		return stm->GetAmmoElapsed();
+	}
+#endif
+
 	const CWeapon* weapon = smart_cast<const CWeapon*>(&object());
 	if (!weapon)
 		return (0);
@@ -658,6 +618,15 @@ u32 CScriptGameObject::GetAmmoElapsed()
 
 void CScriptGameObject::SetAmmoElapsed(int ammo_elapsed)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		stm->SetAmmoElapsed(ammo_elapsed);
+		return;
+	}
+#endif
+	
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
 	if (!weapon) return;
 	weapon->SetAmmoElapsed(ammo_elapsed);
@@ -666,6 +635,14 @@ void CScriptGameObject::SetAmmoElapsed(int ammo_elapsed)
 //Alundaio
 int CScriptGameObject::GetAmmoCount(u8 type)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		return (type < stm->m_ammoTypes.size()) ? stm->GetAmmoCount_forType(stm->m_ammoTypes[type]) : 0;
+	}
+#endif
+
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
 	if (!weapon) return 0;
 
@@ -677,6 +654,15 @@ int CScriptGameObject::GetAmmoCount(u8 type)
 
 void CScriptGameObject::SetAmmoType(u8 type)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		stm->SetAmmoType(type);
+		return;
+	}
+#endif
+
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
 	if (!weapon) return;
 
@@ -685,6 +671,14 @@ void CScriptGameObject::SetAmmoType(u8 type)
 
 u8 CScriptGameObject::GetAmmoType()
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		return stm->GetAmmoType();
+	}
+#endif
+	
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
 	if (!weapon) return 255;
 
@@ -725,6 +719,14 @@ u32 CScriptGameObject::GetWeaponType()
 
 bool CScriptGameObject::HasAmmoType(u8 type)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		return type < stm->m_ammoTypes.size();
+	}
+#endif
+
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
 	if (!weapon) return false;
 
@@ -842,6 +844,38 @@ void CScriptGameObject::SetPsyFactor(float val)
 	pda->m_psy_factor = val;
 }
 
+// Added by Ncenka - allow turn on/off devices
+bool CScriptGameObject::IsDeviceEnabled() const
+{
+	CPda* pda = smart_cast<CPda*>(m_game_object);
+	if (pda)
+		return pda->m_PdaEnabled;
+
+	CCustomDevice* custom_device = smart_cast<CCustomDevice*>(m_game_object);
+	if (custom_device)
+		return custom_device->m_CustomDeviceEnabled;
+
+	return false;
+}
+
+// Added by Ncenka - allow turn on/off devices
+void CScriptGameObject::SetDeviceEnabled(bool enabled)
+{
+	CPda* pda = smart_cast<CPda*>(m_game_object);
+	if (pda)
+	{
+		pda->m_PdaEnabled = enabled;
+		return;
+	}
+
+	CCustomDevice* custom_device = smart_cast<CCustomDevice*>(m_game_object);
+	if (custom_device)
+	{
+		custom_device->m_CustomDeviceEnabled = enabled;
+		return;
+	}
+}
+
 void CScriptGameObject::eat(CScriptGameObject* item)
 {
 	if (!item)
@@ -890,7 +924,7 @@ bool CScriptGameObject::inside(const Fvector& position) const
 	return (inside(position, EPS_L));
 }
 
-void CScriptGameObject::set_patrol_extrapolate_callback(const luabind::functor<bool>& functor)
+void CScriptGameObject::set_patrol_extrapolate_callback(const ::luabind::functor<bool>& functor)
 {
 	CCustomMonster* monster = smart_cast<CCustomMonster*>(&object());
 	if (!monster)
@@ -902,8 +936,8 @@ void CScriptGameObject::set_patrol_extrapolate_callback(const luabind::functor<b
 	monster->movement().patrol().extrapolate_callback().set(functor);
 }
 
-void CScriptGameObject::set_patrol_extrapolate_callback(const luabind::functor<bool>& functor,
-                                                        const luabind::object& object)
+void CScriptGameObject::set_patrol_extrapolate_callback(const ::luabind::functor<bool>& functor,
+                                                        const ::luabind::object& object)
 {
 	CCustomMonster* monster = smart_cast<CCustomMonster*>(&this->object());
 	if (!monster)
@@ -1122,22 +1156,32 @@ void CScriptGameObject::StartUpgrade(CScriptGameObject* obj)
 		pGameSP->StartUpgrade(pActorInv, pOtherOwner);
 }
 
-script_attachment* CScriptGameObject::AddAttachment(u16 slot, LPCSTR model_name)
+script_attachment* CScriptGameObject::AddAttachment(LPCSTR name, LPCSTR model_name)
 {
-	script_attachment* att = xr_new<script_attachment>(slot, model_name);
+	script_attachment* att = xr_new<script_attachment>(name, model_name);
 	R_ASSERT(att);
 	att->SetParent(&object());
 	return att;
 }
 
-script_attachment* CScriptGameObject::GetAttachment(u16 slot)
+script_attachment* CScriptGameObject::GetAttachment(LPCSTR name)
 {
-	return object().get_attachment(slot);
+	return object().get_attachment(name);
 }
 
-void CScriptGameObject::RemoveAttachment(u16 slot)
+void CScriptGameObject::RemoveAttachment(LPCSTR name)
 {
-	object().remove_attachment(slot, true);
+	object().remove_attachment(name);
+}
+
+void CScriptGameObject::RemoveAttachment(script_attachment* child)
+{
+	object().remove_attachment(child);
+}
+
+void CScriptGameObject::IterateAttachments(::luabind::functor<bool> functor)
+{
+	object().iterate_attachments(functor);
 }
 
 CGameObject& CScriptGameObject::object() const
@@ -1160,7 +1204,7 @@ CGameObject& CScriptGameObject::object() const
 
 //////////////////////////////////////////////////////////////////////////
 // Shader / Textures Magic
-luabind::object CScriptGameObject::GetShaders(bool bHud)
+::luabind::object CScriptGameObject::GetShaders(bool bHud)
 {
 	IKinematics* k = nullptr;
 
@@ -1177,7 +1221,7 @@ luabind::object CScriptGameObject::GetShaders(bool bHud)
 	if (!k)
 		k = object().Visual()->dcast_PKinematics();
 
-	luabind::object table = luabind::newtable(ai().script_engine().lua());
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 
 	if (!k)
 	{
@@ -1187,31 +1231,37 @@ luabind::object CScriptGameObject::GetShaders(bool bHud)
 
 	IRenderVisual* vis = k->dcast_RenderVisual();
 	xr_vector<IRenderVisual*>* children = vis->get_children();
+	xr_vector<IRenderVisual*>* children_invisible = vis->get_children_invisible();
 
-	if (!children)
+	if (!children && !children_invisible)
 	{
-		luabind::object subtable = luabind::newtable(ai().script_engine().lua());
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
 		subtable["shader"] = vis->getDebugShader();
 		subtable["texture"] = vis->getDebugTexture();
 		table[1] = subtable;
 		return table;
 	}
 
-	int i = 1;
-
 	for (auto* child : *children)
 	{
-		luabind::object subtable = luabind::newtable(ai().script_engine().lua());
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
 		subtable["shader"] = child->getDebugShader();
 		subtable["texture"] = child->getDebugTexture();
-		table[i] = subtable;
-		++i;
+		table[child->getID()] = subtable;
+	}
+
+	for (auto* child : *children_invisible)
+	{
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
+		subtable["shader"] = child->getDebugShader();
+		subtable["texture"] = child->getDebugTexture();
+		table[child->getID()] = subtable;
 	}
 
 	return table;
 }
 
-luabind::object CScriptGameObject::GetDefaultShaders(bool bHud)
+::luabind::object CScriptGameObject::GetDefaultShaders(bool bHud)
 {
 	IKinematics* k = nullptr;
 
@@ -1228,7 +1278,7 @@ luabind::object CScriptGameObject::GetDefaultShaders(bool bHud)
 	if (!k)
 		k = object().Visual()->dcast_PKinematics();
 
-	luabind::object table = luabind::newtable(ai().script_engine().lua());
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 
 	if (!k)
 	{
@@ -1238,25 +1288,31 @@ luabind::object CScriptGameObject::GetDefaultShaders(bool bHud)
 
 	IRenderVisual* vis = k->dcast_RenderVisual();
 	xr_vector<IRenderVisual*>* children = vis->get_children();
+	xr_vector<IRenderVisual*>* children_invisible = vis->get_children_invisible();
 
-	if (!children)
+	if (!children && !children_invisible)
 	{
-		luabind::object subtable = luabind::newtable(ai().script_engine().lua());
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
 		subtable["shader"] = vis->getDebugShaderDef();
 		subtable["texture"] = vis->getDebugTextureDef();
 		table[1] = subtable;
 		return table;
 	}
 
-	int i = 1;
-
 	for (auto* child : *children)
 	{
-		luabind::object subtable = luabind::newtable(ai().script_engine().lua());
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
 		subtable["shader"] = child->getDebugShaderDef();
 		subtable["texture"] = child->getDebugTextureDef();
-		table[i] = subtable;
-		++i;
+		table[child->getID()] = subtable;
+	}
+
+	for (auto* child : *children_invisible)
+	{
+		::luabind::object subtable = ::luabind::newtable(ai().script_engine().lua());
+		subtable["shader"] = child->getDebugShaderDef();
+		subtable["texture"] = child->getDebugTextureDef();
+		table[child->getID()] = subtable;
 	}
 
 	return table;
@@ -1265,51 +1321,77 @@ luabind::object CScriptGameObject::GetDefaultShaders(bool bHud)
 void set_shader_tex(IRenderVisual* vis, int id, LPCSTR shader, LPCSTR texture)
 {
 	xr_vector<IRenderVisual*>* children = vis->get_children();
+	xr_vector<IRenderVisual*>* children_invisible = vis->get_children_invisible();
 
-	if (!children)
+	if (!children && !children_invisible)
 	{
 		vis->SetShaderTexture(shader, texture);
 		return;
 	}
 
-	if (id == -1)
+	if (id < 1)
 	{
 		for (auto* child : *children)
+		{
+			child->SetShaderTexture(shader, texture);
+		}
+		for (auto* child : *children_invisible)
 		{
 			child->SetShaderTexture(shader, texture);
 		}
 		return;
 	}
 
-	id--;
-
-	if (id >= 0 && children->size() > id)
-		children->at(id)->SetShaderTexture(shader, texture);
+	for (auto* child : *children)
+	{
+		if (child->getID() != id) continue;
+		child->SetShaderTexture(shader, texture);
+		return;
+	}
+	for (auto* child : *children_invisible)
+	{
+		if (child->getID() != id) continue;
+		child->SetShaderTexture(shader, texture);
+		return;
+	}
 }
 
 void reset_shader_tex(IRenderVisual* vis, int id)
 {
 	xr_vector<IRenderVisual*>* children = vis->get_children();
+	xr_vector<IRenderVisual*>* children_invisible = vis->get_children_invisible();
 
-	if (!children)
+	if (!children && !children_invisible)
 	{
 		vis->ResetShaderTexture();
 		return;
 	}
 
-	if (id == -1)
+	if (id < 1)
 	{
 		for (auto* child : *children)
+		{
+			child->ResetShaderTexture();
+		}
+		for (auto* child : *children_invisible)
 		{
 			child->ResetShaderTexture();
 		}
 		return;
 	}
 
-	id--;
-
-	if (id >= 0 && children->size() > id)
-		children->at(id)->ResetShaderTexture();
+	for (auto* child : *children)
+	{
+		if (child->getID() != id) continue;
+		child->ResetShaderTexture();
+		return;
+	}
+	for (auto* child : *children_invisible)
+	{
+		if (child->getID() != id) continue;
+		child->ResetShaderTexture();
+		return;
+	}
 }
 
 void CScriptGameObject::SetShaderTexture(int id, LPCSTR shader, LPCSTR texture, bool bHud)

@@ -26,6 +26,9 @@ public:
 	virtual void Load(LPCSTR section);
 	virtual void net_Destroy();
 
+	virtual float GetNearWallOffset();
+	virtual Fmatrix RayTransform();
+
 	virtual void OnH_A_Chield();
 	virtual void OnH_B_Independent(bool just_before_destroy);
 
@@ -92,7 +95,7 @@ protected:
 	float m_fLR_MovingFactor;
 	float m_fLR_InertiaFactor;
 	float m_fUD_InertiaFactor;
-	bool hasEnoughBatteryPower(){ return (!IsUsingCondition() || (IsUsingCondition() && GetCondition() > m_fLowestBatteryCharge)); }
+	bool hasEnoughBatteryPower(){ return (!IsUsingCondition() || (m_PdaEnabled && IsUsingCondition() && GetCondition() > m_fLowestBatteryCharge)); }
 	static void _BCL JoystickCallback(CBoneInstance* B);
 	bool m_bNoticedEmptyBattery;
 	bool m_LastMBZoom;
@@ -124,5 +127,7 @@ public:
 	eDeferredEnableState m_eDeferredEnable;
 	bool m_bPowerSaving;
 	float m_psy_factor;
+	bool m_PdaEnabled;
 	float m_thumb_rot[2];
+	float m_nearwall_zoomed_range;
 };

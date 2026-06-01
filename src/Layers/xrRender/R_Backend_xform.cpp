@@ -41,6 +41,38 @@ void R_xforms::set_P(const Fmatrix& m)
 	RCache.set_xform(D3DTS_PROJECTION, m);
 }
 
+void R_xforms::set_W_prev(const Fmatrix& m)
+{
+	m_w_prev[Device.m_SecondViewport.IsSVPFrame()].set(m);
+	m_wv_prev[Device.m_SecondViewport.IsSVPFrame()].mul_43(m_v_prev[Device.m_SecondViewport.IsSVPFrame()], m_w_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()].mul(m_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]);
+
+	if (c_w_prev)		RCache.set_c(c_w_prev[Device.m_SecondViewport.IsSVPFrame()], m_w_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_wv_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_wv_prev[Device.m_SecondViewport.IsSVPFrame()], m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()], m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()]);
+}
+void R_xforms::set_V_prev(const Fmatrix& m)
+{
+	m_v_prev[Device.m_SecondViewport.IsSVPFrame()].set(m);
+	m_wv_prev[Device.m_SecondViewport.IsSVPFrame()].mul_43(m_v_prev[Device.m_SecondViewport.IsSVPFrame()], m_w_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	m_vp_prev[Device.m_SecondViewport.IsSVPFrame()].mul(m_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_v_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()].mul(m_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]);
+
+	if (c_v_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_v_prev[Device.m_SecondViewport.IsSVPFrame()], m_v_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_vp_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_vp_prev[Device.m_SecondViewport.IsSVPFrame()], m_vp_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_wv_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_wv_prev[Device.m_SecondViewport.IsSVPFrame()], m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()], m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()]);
+}
+void R_xforms::set_P_prev(const Fmatrix& m)
+{
+	m_p_prev[Device.m_SecondViewport.IsSVPFrame()].set(m);
+	m_vp_prev[Device.m_SecondViewport.IsSVPFrame()].mul(m_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_v_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()].mul(m_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_p_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_p_prev[Device.m_SecondViewport.IsSVPFrame()], m_p_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_vp_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_vp_prev[Device.m_SecondViewport.IsSVPFrame()], m_vp_prev[Device.m_SecondViewport.IsSVPFrame()]);
+	if (c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()])		RCache.set_c(c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()], m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()]);
+}
+
 void R_xforms::apply_invw()
 {
 	VERIFY(c_invw);
@@ -63,6 +95,16 @@ void R_xforms::unmap()
 	c_wv = NULL;
 	c_vp = NULL;
 	c_wvp = NULL;
+
+
+	for (auto i = 0; i < 2; i++) {
+		c_w_prev[i] = NULL;
+		c_v_prev[i] = NULL;
+		c_p_prev[i] = NULL;
+		c_wv_prev[i] = NULL;
+		c_vp_prev[i] = NULL;
+		c_wvp_prev[i] = NULL;
+	}
 }
 
 R_xforms::R_xforms()
@@ -75,5 +117,16 @@ R_xforms::R_xforms()
 	m_wv.identity();
 	m_vp.identity();
 	m_wvp.identity();
+
+
+	for (auto i = 0; i < 2; i++) {
+		m_w_prev[i].identity();
+		m_v_prev[i].identity();
+		m_p_prev[i].identity();
+		m_wv_prev[i].identity();
+		m_vp_prev[i].identity();
+		m_wvp_prev[i].identity();
+	}
+
 	m_bInvWValid = true;
 }

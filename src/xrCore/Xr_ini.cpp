@@ -15,7 +15,7 @@
 XRCORE_API CInifile const* pSettings = NULL;
 XRCORE_API CInifile const* pSettingsAuth = NULL;
 
-//#define INICACHE_PRINT_DEBUG
+BOOL print_dltx_warnings = FALSE;
 
 CInifile* CInifile::Create(const char* szFileName, BOOL ReadOnly)
 {
@@ -39,7 +39,7 @@ bool item_pred(const CInifile::Item& x, LPCSTR val)
 }
 
 //------------------------------------------------------------------------------
-//Òåëî ôóíêöèé Inifile
+//Ð¢ÐµÐ»Ð¾ Ñ„ÑƒÐ½ÐºÑ†Ð¸Ð¹ Inifile
 //------------------------------------------------------------------------------
 XRCORE_API BOOL _parse(LPSTR dest, LPCSTR src)
 {
@@ -368,7 +368,7 @@ void CInifile::Load(IReader* F, LPCSTR path
 					if (!bIsCurrentSectionOverride)
 					{
 
-						Debug.fatal(DEBUG_INFO, "Duplicate section '%s' wasn't marked as an override.\n\nOverride section by prefixing it with '!' (![%s]) or give it a unique name.\n\nCheck this file and its DLTX mods:\n\"%s\",\nfile with section \"%s\",\nfile with duplicate \"%s\"", *Current->Name, *Current->Name, m_file_name, SectionToFilename[std::string(Current->Name.c_str())].c_str(), currentFileName);
+						Debug.fatal(DEBUG_INFO, "[DLTX] Duplicate section '%s' wasn't marked as an override.\n\nOverride section by prefixing it with '!' (![%s]) or give it a unique name.\n\nCheck this file and its DLTX mods:\n\"%s\",\nfile with section \"%s\",\nfile with duplicate \"%s\"", *Current->Name, *Current->Name, m_file_name, SectionToFilename[std::string(Current->Name.c_str())].c_str(), currentFileName);
 					}
 
 					//Overwrite existing override data
@@ -834,11 +834,13 @@ void CInifile::Load(IReader* F, LPCSTR path
 		}
 
 		//Delete entries that are still marked DLTX_DELETE
+		xr_unordered_set<xr_string> deletedItems;
 		for (auto It = CurrentSect->Data.rbegin(); It != CurrentSect->Data.rend(); ++It)
 		{
 			if (IsStringDLTXDelete(It->second))
 			{
 				CurrentSect->Data.erase(It.base() - 1);
+				deletedItems.insert(It->first.c_str());
 			}
 		}
 
@@ -847,12 +849,19 @@ void CInifile::Load(IReader* F, LPCSTR path
 			for (auto It = OverrideModifyListData[std::string(CurrentSect->Name.c_str())].begin(); It != OverrideModifyListData[std::string(CurrentSect->Name.c_str())].end(); ++It) {
 				CInifile::Item &I = *It;
 
-				// If section exists with item list, split list and perform operation
+				// Get list mode operation (add or delete)
 				char dltx_listmode = I.first[0];
 				I.first = I.first.c_str() + 1;
 
+				// Find existing item list if exists
 				CInifile::SectIt_ sect_it = std::lower_bound(CurrentSect->Data.begin(), CurrentSect->Data.end(), *I.first, item_pred);
-				if (sect_it != CurrentSect->Data.end() && sect_it->first.equal(I.first)) {
+
+				// If item list doesn't exist and wasn't deleted by previous operation, insert as is
+				if (I.second != NULL && deletedItems.find(I.first.c_str()) == deletedItems.end() && dltx_listmode == '>' && (sect_it == CurrentSect->Data.end() || !sect_it->first.equal(I.first))) {
+					CurrentSect->Data.insert(sect_it, I);	
+
+				// If item list exists, split existing list and perform operation
+				} else if (sect_it != CurrentSect->Data.end() && sect_it->first.equal(I.first)) {
 
 					//Msg("%s has dltx_listmode %s", I.first.c_str(), std::string(1, dltx_listmode).c_str());
 
@@ -924,7 +933,6 @@ void CInifile::Load(IReader* F, LPCSTR path
 				}
 			}
 		}
-		
 
 		//Pop from stack
 		auto LastElement = PreviousEvaluations->end();
@@ -985,11 +993,13 @@ void CInifile::Load(IReader* F, LPCSTR path
 	if (OverrideData.size())
 	{
 		//Debug.fatal(DEBUG_INFO, "Attemped to override section '%s', which doesn't exist. Ensure that a base section with the same name is loaded first. Check this file and its DLTX mods: %s", OverrideData.begin()->first.c_str(), m_file_name);
-		for (auto i = OverrideData.begin(); i != OverrideData.end(); i++) {
-			auto override_filenames = OverrideToFilename.find(i->first);
-			if (override_filenames != OverrideToFilename.end()) {
-				for (auto &override_filename : override_filenames->second) {
-					Msg("!!!DLTX ERROR Attemped to override section '%s', which doesn't exist. Ensure that a base section with the same name is loaded first. Check this file and its DLTX mods: %s, mod file %s", i->first.c_str(), m_file_name, override_filename.first.c_str());
+		if (print_dltx_warnings) {
+			for (const auto& [k, v] : OverrideData) {
+				auto override_filenames = OverrideToFilename.find(k);
+				if (override_filenames != OverrideToFilename.end()) {
+					for (const auto& override_filename : override_filenames->second) {
+						Msg("~[DLTX] WARNING: Attemped to override section '%s', which doesn't exist. Ensure that a base section with the same name is loaded first. Check this file and its DLTX mods: %s, mod file %s", k.c_str(), m_file_name, override_filename.first.c_str());
+					}
 				}
 			}
 		}
@@ -1132,12 +1142,6 @@ bool CInifile::save_as(LPCSTR new_fname)
 
 BOOL CInifile::section_exist(LPCSTR S) const
 {
-	if (S && m_cache.find(S) != m_cache.end()) {
-#ifdef INICACHE_PRINT_DEBUG
-		Msg("[%s] section_exist: found section %s in cache", m_file_name, S);
-#endif // INICACHE_PRINT_DEBUG
-		return TRUE;
-	}
 	RootCIt I = std::lower_bound(DATA.begin(), DATA.end(), S, sect_pred);
 	return (I != DATA.end() && xr_strcmp(*(*I)->Name, S) == 0);
 }
@@ -1145,18 +1149,6 @@ BOOL CInifile::section_exist(LPCSTR S) const
 BOOL CInifile::line_exist(LPCSTR S, LPCSTR L) const
 {
 	if (!section_exist(S)) return FALSE;
-
-	if (S && L) {
-		auto cacheSec = m_cache.find(S);
-		if (cacheSec != m_cache.end() && cacheSec->second.find(L) != cacheSec->second.end()) {
-
-#ifdef INICACHE_PRINT_DEBUG
-			Msg("[%s] line_exist: found section %s line %s in cache", m_file_name, S, L);
-#endif // INICACHE_PRINT_DEBUG
-
-			return TRUE;
-		}
-	}
 
 	Sect& I = r_section(S);
 	SectCIt A = std::lower_bound(I.Data.begin(), I.Data.end(), L, item_pred);
@@ -1216,42 +1208,11 @@ CInifile::Sect& CInifile::r_section(LPCSTR S) const
 	return **I;
 }
 
-void CInifile::cacheValue(LPCSTR S, LPCSTR L, shared_str& V) {
-	if (S && L) {
-
-#ifdef INICACHE_PRINT_DEBUG
-		Msg("[%s] cacheValue: writing [%s] %s = %s in cache", m_file_name, S, L, V.c_str());
-#endif // INICACHE_PRINT_DEBUG
-
-		std::string s = S;
-		std::string l = L;
-		m_cache[s][l] = V;
-	}
-}
-
 LPCSTR CInifile::r_string(LPCSTR S, LPCSTR L) const
 {
 	if (!S || !L || !strlen(S) || !strlen(L)) //--#SM+#-- [fix for one of "xrDebug - Invalid handler" error log]
 	{
 		Msg("!![ERROR] CInifile::r_string: S = [%s], L = [%s]", S, L);
-	}
-	
-	if (S && L) {
-		std::string s = S;
-		std::string l = L;
-		auto sectKey = m_cache.find(s);
-		if (sectKey != m_cache.end()) {
-			auto lineKey = sectKey->second.find(l);
-			if (lineKey != sectKey->second.end()) {
-				auto& res = lineKey->second;
-
-#ifdef INICACHE_PRINT_DEBUG
-				Msg("[%s] r_string: getting [%s] %s = %s in cache", m_file_name, S, L, res.c_str());
-#endif // INICACHE_PRINT_DEBUG
-
-				return *res;
-			}
-		}
 	}
 
 	Sect const& I = r_section(S);
@@ -1259,7 +1220,6 @@ LPCSTR CInifile::r_string(LPCSTR S, LPCSTR L) const
 	if (A != I.Data.end() && xr_strcmp(*A->first, L) == 0) {
 		shared_str V = A->second;
 		LPCSTR res = *V;
-		const_cast<CInifile*>(this)->cacheValue(S, L, V);
 		return res;
 	}
 	else
@@ -1513,9 +1473,6 @@ void CInifile::w_string(LPCSTR S, LPCSTR L, LPCSTR V, LPCSTR comment)
 	{
 		data.Data.insert(it, I);
 	}
-
-	cacheValue(sect, I.first.c_str(), I.second);
-	
 }
 
 void CInifile::w_u8(LPCSTR S, LPCSTR L, u8 V, LPCSTR comment)
@@ -1660,13 +1617,5 @@ void CInifile::remove_line(LPCSTR S, LPCSTR L)
 		SectIt_ A = std::lower_bound(data.Data.begin(), data.Data.end(), L, item_pred);
 		R_ASSERT(A != data.Data.end() && xr_strcmp(*A->first, L) == 0);
 		data.Data.erase(A);
-
-#ifdef INICACHE_PRINT_DEBUG
-		Msg("[%s] remove_line: removing [%s] %s from cache", m_file_name, S, L);
-#endif // INICACHE_PRINT_DEBUG
-
-		std::string s = S;
-		std::string l = L;
-		m_cache[s].erase(l);
 	}
 }

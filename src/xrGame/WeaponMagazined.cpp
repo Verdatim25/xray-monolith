@@ -30,8 +30,7 @@
 extern ENGINE_API bool g_dedicated_server;
 ENGINE_API extern float psHUD_FOV_def;
 
-float g_gunsnd_indoor = 0.f;
-float g_gunsnd_indoor_volume = 1.f;
+BOOL g_auto_reload = FALSE;
 
 CUIXml* pWpnScopeXml = NULL;
 
@@ -72,6 +71,7 @@ CWeaponMagazined::~CWeaponMagazined()
 	}
 
 	// sounds
+	Device.remove_from_seq_parallel(fastdelegate::FastDelegate0<>(this, &CWeaponMagazined::UpdateSoundsPositions));
 }
 
 void CWeaponMagazined::net_Destroy()
@@ -109,9 +109,6 @@ void CWeaponMagazined::Load(LPCSTR section)
 	m_sounds.LoadSound(section, "snd_shoot", "sndShot", false, m_eSoundShot);
 	if (WeaponSoundExist(section, "snd_shoot_actor"))
 		m_sounds.LoadSound(section, "snd_shoot_actor", "sndShotActor", false, m_eSoundShot);
-	// Indoor
-	if (WeaponSoundExist(section, "snd_shoot_indoor"))
-		m_sounds.LoadSound(section, "snd_shoot_indoor", "sndShotIndoor", false, m_eSoundShot);
 	//-Alundaio
 	// Cyclic fire sounds
 	if (WeaponSoundExist(section, "snd_shoot_actor_first"))
@@ -170,10 +167,6 @@ void CWeaponMagazined::Load(LPCSTR section)
 		// Cyclic fire sounds w/ silencer
 		if (WeaponSoundExist(section, "snd_silncer_shoot_actor_first"))
 			m_sounds.LoadSound(section, "snd_silncer_shoot_actor_first", "sndSilencerShotActorFirst", false, m_eSoundShot);
-
-		// Indoor
-		if (WeaponSoundExist(section, "snd_silncer_shoot_indoor"))
-			m_sounds.LoadSound(section, "snd_silncer_shoot_indoor", "sndSilencerShotIndoor", false, m_eSoundShot);
 
 		//misfire shot
 		if (WeaponSoundExist(section, "snd_silncer_shot_misfire"))
@@ -286,11 +279,14 @@ void CWeaponMagazined::FireEnd()
 {
 	inherited::FireEnd();
 
-	/* Alundaio: Removed auto-reload since it's widely asked by just about everyone who is a gun whore
-    CActor	*actor = smart_cast<CActor*>(H_Parent());
-    if (m_pInventory && !iAmmoElapsed && actor && GetState() != eReload)
-        Reload();
-	*/
+	// Alundaio: Removed auto-reload since it's widely asked by just about everyone who is a gun whore
+	// Lander: Reinstated as a cvar
+	if (g_auto_reload)
+	{
+		CActor	*actor = smart_cast<CActor*>(H_Parent());
+		if (m_pInventory && !iAmmoElapsed && actor && GetState() != eReload)
+			Reload();
+	}
 }
 
 void CWeaponMagazined::Reload()
@@ -659,6 +655,7 @@ void CWeaponMagazined::on_b_hud_detach()
 	}
 }
 
+extern ENGINE_API BOOL g_bootComplete;
 void CWeaponMagazined::UpdateCL()
 {
 	inherited::UpdateCL();
@@ -691,54 +688,44 @@ void CWeaponMagazined::UpdateCL()
 	UpdateSounds();
 }
 
+BOOL mt_UpdateWeaponSounds = TRUE;
+void CWeaponMagazined::UpdateSoundsPositionsImpl()
+{
+	PROF_EVENT();
+	auto& P = get_LastFP();
+	m_sounds.UpdateAllSoundsPositions(P);
+}
+
+void CWeaponMagazined::UpdateSoundsPositions()
+{
+	UpdateSoundsPositionsImpl();
+}
+
 void CWeaponMagazined::UpdateSounds()
 {
 	if (Device.dwFrame == dwUpdateSounds_Frame)
 		return;
 
+	// demonized: put updates of m_sounds into second thread
+	if (g_bootComplete && mt_UpdateWeaponSounds && dwUpdateSounds_Frame != 0 )
+	{
+		// Force update of fire dependencies and then put into second thread, fixes flickering limbs
+		get_LastFP();
+		Device.seqParallel.push_back(fastdelegate::FastDelegate0<>(this, &CWeaponMagazined::UpdateSoundsPositions));
+	}
+	else
+	{
+		UpdateSoundsPositions();
+	}
+
 	dwUpdateSounds_Frame = Device.dwFrame;
-
-	Fvector P = get_LastFP();
-	m_sounds.SetPosition("sndShow", P);
-	m_sounds.SetPosition("sndHide", P);
-	m_sounds.SetPosition("sndReload", P);
-
-	// New Sounds
-	if (m_sounds.FindSoundItem("sndReloadEmpty", false))
-		m_sounds.SetPosition("sndReloadEmpty", P); 
-	if (m_sounds.FindSoundItem("sndReloadMisfire", false))
-		m_sounds.SetPosition("sndReloadMisfire", P);
-	if (m_sounds.FindSoundItem("sndReloadActor", false))
-		m_sounds.SetPosition("sndReloadActor", P);
-	if (m_sounds.FindSoundItem("sndReloadEmptyActor", false))
-		m_sounds.SetPosition("sndReloadEmptyActor", P);
-	if (m_sounds.FindSoundItem("sndReloadMisfireActor", false))
-		m_sounds.SetPosition("sndReloadMisfireActor", P);
-	if (m_sounds.FindSoundItem("sndEmptyClickActor", false))
-		m_sounds.SetPosition("sndEmptyClickActor", P);
-	if (m_sounds.FindSoundItem("sndShowActor", false))
-		m_sounds.SetPosition("sndShowActor", P); 
-	if (m_sounds.FindSoundItem("sndHideActor", false))
-		m_sounds.SetPosition("sndHideActor", P);
-	if (m_sounds.FindSoundItem("sndClickMisfire", false))
-		m_sounds.SetPosition("sndClickMisfire", P);
-	if (m_sounds.FindSoundItem("sndClickMisfireActor", false))
-		m_sounds.SetPosition("sndClickMisfireActor", P);
-	if (m_sounds.FindSoundItem("sndShotMisfire", false))
-		m_sounds.SetPosition("sndShotMisfire", P);
-	if (m_sounds.FindSoundItem("sndShotMisfireActor", false))
-		m_sounds.SetPosition("sndShotMisfireActor", P);
-	if (m_sounds.FindSoundItem("sndShotActorFirst", false))
-		m_sounds.SetPosition("sndShotActorFirst", P);
-	if (m_sounds.FindSoundItem("sndShotIndoor", false))
-		m_sounds.SetPosition("sndShotIndoor", P);
 }
 
 // demonized: check if cycle_down is enabled and shot num below max possible burst. Adds support for arbitrary burst shot at rpm_mode_2 with cycling down to rpm after maxBurstAmount
 bool CWeaponMagazined::cycleDownCheck() {
 	s8 maxBurstAmount = 0;
 	for (const auto& fm : m_aFireModes) {
-		maxBurstAmount = max(maxBurstAmount, fm);
+		maxBurstAmount = std::max(maxBurstAmount, fm);
 	}
 	return bCycleDown && maxBurstAmount > 1 && m_iShotNum < (maxBurstAmount - 1);
 }
@@ -871,35 +858,6 @@ void CWeaponMagazined::PlaySoundShot()
 				return;
 			}
 		}
-		// INDOOR
-		if (g_gunsnd_indoor>0.f)
-		{
-			string128 sndNameIndoor;
-			strconcat(sizeof(sndNameIndoor), sndNameIndoor, m_sSndShotCurrent.c_str(), "Indoor");
-			if (m_sounds.FindSoundItem(sndNameIndoor, false))
-			{
-				m_sounds.PlaySound(sndNameIndoor, get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1, g_gunsnd_indoor*g_gunsnd_indoor_volume);
-				if (1.f-g_gunsnd_indoor>0.f) 
-				{
-					string128 sndNameFirst;
-					strconcat(sizeof(sndNameFirst), sndNameFirst, m_sSndShotCurrent.c_str(), "ActorFirst");
-					if (m_iShotNum == 1 && m_sounds.FindSoundItem(sndNameFirst, false))
-					{
-						m_sounds.PlaySound(sndNameFirst, get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1, 1.f-g_gunsnd_indoor);
-						return;
-					}
-			
-					string128 sndName;
-					strconcat(sizeof(sndName), sndName, m_sSndShotCurrent.c_str(), "Actor");
-					if (m_sounds.FindSoundItem(sndName, false))
-					{
-						m_sounds.PlaySound(sndName, get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1,  1.f-g_gunsnd_indoor);
-						return;
-					}
-				}
-				return;
-			}
-		}
 
 		string128 sndNameFirst;
 		strconcat(sizeof(sndNameFirst), sndNameFirst, m_sSndShotCurrent.c_str(), "ActorFirst");
@@ -925,17 +883,6 @@ void CWeaponMagazined::PlaySoundShot()
 		if (m_sounds.FindSoundItem(sndNameMisfire, false))
 		{
 			m_sounds.PlaySound(sndNameMisfire, get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1);
-			return;
-		}
-	}
-
-	if (g_gunsnd_indoor==1.f)
-	{
-		string128 sndNameIndoor;
-		strconcat(sizeof(sndNameIndoor), sndNameIndoor, m_sSndShotCurrent.c_str(), "Indoor");
-		if (m_sounds.FindSoundItem(sndNameIndoor, false))
-		{
-			m_sounds.PlaySound(sndNameIndoor, get_LastFP(), H_Root(), !!GetHUDmode(), false, (u8)-1, 1.f*g_gunsnd_indoor_volume);
 			return;
 		}
 	}
@@ -1194,7 +1141,6 @@ void CWeaponMagazined::switch2_Hidden()
 
 	signal_HideComplete();
 	RemoveShotEffector();
-	m_nearwall_last_hud_fov = psHUD_FOV_def;
 }
 
 void CWeaponMagazined::switch2_Showing()

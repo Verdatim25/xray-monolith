@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////
-// script_game_object_trader.сpp :	функции для торговли и торговцев
+// script_game_object_trader.СЃpp :	С„СѓРЅРєС†РёРё РґР»СЏ С‚РѕСЂРіРѕРІР»Рё Рё С‚РѕСЂРіРѕРІС†РµРІ
 //////////////////////////////////////////////////////////////////////////
 
 #include "pch_script.h"
@@ -50,6 +50,7 @@
 #include "medkit.h"
 #include "antirad.h"
 #include "BottleItem.h"
+#include "WeaponKnife.h"
 
 class CWeapon;
 
@@ -532,8 +533,10 @@ SPECIFIC_CAST(CScriptGameObject::cast_Helmet, CHelmet);
 SPECIFIC_CAST(CScriptGameObject::cast_Artefact, CArtefact);
 SPECIFIC_CAST(CScriptGameObject::cast_Ammo, CWeaponAmmo);
 SPECIFIC_CAST(CScriptGameObject::cast_Weapon, CWeapon);
+SPECIFIC_CAST(CScriptGameObject::cast_Knife, CWeaponKnife);
 SPECIFIC_CAST(CScriptGameObject::cast_WeaponMagazined, CWeaponMagazined);
 SPECIFIC_CAST(CScriptGameObject::cast_WeaponMagazinedWGrenade, CWeaponMagazinedWGrenade);
+SPECIFIC_CAST(CScriptGameObject::cast_Missile, CMissile);
 CMedkit* CScriptGameObject::cast_Medkit()
 {
 	CInventoryItem* ii = object().cast_inventory_item();
@@ -560,3 +563,18 @@ CBottleItem* CScriptGameObject::cast_BottleItem()
 	return ii ? smart_cast<CBottleItem*>(ii) : (0);
 }
 //end AVO
+
+void CScriptGameObject::memory_remove_links(const CScriptGameObject* tpLuaGameObject)
+{
+	CCustomMonster* monster = smart_cast<CCustomMonster*>(&object());
+	if (monster)
+	{
+		monster->memory().remove_links(&tpLuaGameObject->object());
+	}
+	else
+	{
+		ai().script_engine().script_log(ScriptStorage::eLuaMessageTypeError,
+			"CGameObject : cannot access class member memory_remove_links!");
+	}
+}
+

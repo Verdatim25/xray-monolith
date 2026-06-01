@@ -664,6 +664,16 @@ public:
 		return *this;
 	}
 
+	IC void decompose_projection(T& fFov, T& fAspect, T& fNearPlane, T& fFarPlane) {
+		T Q = _33;
+		T w = _11;
+		T h = _22;
+		fNearPlane = _43 / -Q;
+		fFarPlane = (fNearPlane * Q) / (Q - 1.0f);
+		fAspect = w / h;
+		fFov = 2.0 * atanf(1.0f / h);
+	}
+
 	IC SelfRef build_projection_ortho(T w, T h, T zn, T zf)
 	{
 		_11 = T(2) / w;
@@ -916,11 +926,16 @@ public:
 		xyz.mul(-1.f);
 	}
 
-	IC static void hud_to_world(Self& xform)
+	IC SelfRef hud_to_world()
 	{
-		Fvector::hud_to_world(xform.c);
-		Fvector::hud_to_world_dir(xform.k);
-		Fvector::generate_orthonormal_basis_normalized(xform.k, xform.j, xform.i);
+		Device.hud_to_world(*this);
+		return *this;
+	}
+
+	IC SelfRef world_to_hud()
+	{
+		Device.world_to_hud(*this);
+		return *this;
 	}
 };
 

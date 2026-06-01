@@ -23,12 +23,17 @@
 
 #define DEVICE_RESET_PRECACHE_FRAME_COUNT 10
 
+// demonized: toggle bone optimization
+#define OPTIMIZE_CALCULATE_BONES
+
 #include "../Include/xrRender/FactoryPtr.h"
 #include "../Include/xrRender/RenderDeviceRender.h"
+#include "imgui_base.h"
 
 #ifdef INGAME_EDITOR
 # include "../Include/editor/interfaces.hpp"
 #endif // #ifdef INGAME_EDITOR
+#include "../Include/xrRender/Kinematics.h"
 
 class engine_impl;
 
@@ -54,8 +59,11 @@ public:
 	BOOL b_hide_cursor;
 public:
 
-	// Engine flow-control
+	// Engine flow-control (Updates once per Present)
 	u32 dwFrame;
+	
+	// Used for cache clearing when in SVP mode.
+	u32 dwViewport = 0;
 
 	float fTimeDelta;
 	float fTimeGlobal;
@@ -74,6 +82,12 @@ public:
 	Fmatrix mFullTransform;
 	Fmatrix mFullTransformHud;
 
+	Fmatrix mView_prev;
+	Fmatrix mProject_prev;
+
+	Fvector4 wind_anim_prev;
+	Fvector4 wind_anim_saved;
+
 	// Copies of corresponding members. Used for synchronization.
 	Fvector vCameraPosition_saved;
 
@@ -84,6 +98,17 @@ public:
 	float fFOV;
 	float fASPECT;
 	float ViewportNear = 0.2f;
+
+	// Data for the main camera (1), and svp camera (2)
+	struct MatrixData {
+		Fmatrix mView;
+		Fmatrix mProject;
+		Fmatrix mProjectHud;
+	};
+
+	MatrixData matrices[2];
+	MatrixData matrices_previous[2];
+
 protected:
 
 	u32 Timer_MM_Delta;
@@ -124,22 +149,38 @@ public:
 	class ENGINE_API CSecondVPParams //--#SM+#-- +SecondVP+
 	{
 		bool isActive; // Oeaa aeoeaaoee ?aiaa?a ai aoi?ie au?ii?o
-		u8 frameDelay;  // Ia eaeii eaa?a n iiiaioa i?ioeiai ?aiaa?a ai aoi?ie au?ii?o iu ia?i?i iiaue
-						  //(ia ii?ao auou iaiuoa 2 - ea?aue aoi?ie eaa?, ?ai aieuoa oai aieaa ieceee FPS ai aoi?ii au?ii?oa)
 
 	public:
-		bool isCamReady; // Oeaa aioiaiinoe eaia?u (FOV, iiceoey, e o.i) e ?aiaa?o aoi?iai au?ii?oa
+		struct Lens { Fmatrix m_W; float radius; };
+		Lens eyepiece;
+		Lens objective;
 
+		Fvector3 w_ffp;
+		Fvector3 w_sfp;
+
+		// Objective lens screen space bounding box (FIXME: Hardcoded to 50% screen size)
+		Irect computeRect(float width, float height) {
+			Fvector v = { width, height };
+
+			auto c = Fvector(v).mul(0.5);
+			auto s = v.y * 0.5;
+			auto hs = s * 0.5;
+
+			auto min = Fvector(c).sub(hs);
+			auto max = Fvector(c).add(hs);
+
+			return { static_cast<int>(min.x), static_cast<int>(min.y), static_cast<int>(max.x), static_cast<int>(max.y) };
+		}
+
+		bool isSVPFrame = false;
 		IC bool IsSVPActive() { return isActive; }
 		void SetSVPActive(bool bState);
-		bool    IsSVPFrame();
+		bool IsSVPFrame() { return isSVPFrame; }
 
-		IC u8 GetSVPFrameDelay() { return frameDelay; }
-		void  SetSVPFrameDelay(u8 iDelay)
-		{
-			frameDelay = iDelay;
-			clamp<u8>(frameDelay, 2, u8(-1));
-		}
+		// Fetch the bone matrix of `v` from renderable skeleton (set in r4)
+		//    No longer required once scope calculations are moved into r4
+		std::function<bool(IKinematics* k, IRenderVisual* v, Fmatrix& m)> get_bone_matrix;
+		std::function<void()> update_lens_params;
 	};	
 	
 private:
@@ -237,6 +278,10 @@ public:
 
 	CSecondVPParams m_SecondViewport;	//--#SM+#-- +SecondVP+
 
+	// FIXME: Use chaindesc (Macro)
+	u32 svp_width() { return svp_height(); }
+	u32 svp_height() { return dwHeight >> 1; }
+
 	//float fFOV;
 	//float fASPECT;
 
@@ -262,9 +307,7 @@ public:
 		Timer.Start();
 		m_bNearer = FALSE;
 		
-		m_SecondViewport.SetSVPActive(false);
-		m_SecondViewport.SetSVPFrameDelay(2);
-		m_SecondViewport.isCamReady = false;			
+		m_SecondViewport.SetSVPActive(false);		
 	};
 
 	void Pause(BOOL bOn, BOOL bTimer, BOOL bSound, LPCSTR reason);
@@ -312,6 +355,101 @@ public:
 		return (Timer.time_factor());
 	}
 
+	Fvector& hud_to_world(Fvector& v, const Fmatrix& p)
+	{
+		mView.transform_tiny(v);
+		p.transform_tiny(v);
+
+		v.z -= ViewportNear;
+
+		mInvProject.transform_tiny(v);
+		mInvView.transform_tiny(v);
+
+		return v;
+	}
+
+	Fvector& hud_to_world(Fvector& v)
+	{
+		return hud_to_world(v, mProjectHud);
+	}
+
+	Fvector& hud_to_world_dir(Fvector& v, const Fmatrix& p)
+	{
+		mView.transform_dir(v);
+		p.transform_dir(v);
+
+		mInvProject.transform_dir(v);
+		mInvView.transform_dir(v);
+
+		return v;
+	}
+
+	Fvector& hud_to_world_dir(Fvector& v)
+	{
+		return hud_to_world_dir(v, mProjectHud);
+	}
+
+	Fmatrix& hud_to_world(Fmatrix& m, const Fmatrix& p)
+	{
+		hud_to_world(m.c, p);
+		hud_to_world_dir(m.i, p).normalize();
+		hud_to_world_dir(m.j, p).normalize();
+		hud_to_world_dir(m.k, p).normalize();
+		return m;
+	}
+
+	Fmatrix& hud_to_world(Fmatrix& m)
+	{
+		return hud_to_world(m, mProjectHud);
+	}
+
+	Fvector& world_to_hud(Fvector& v, const Fmatrix& p)
+	{
+		mInvView.transform_tiny(v);
+		mInvProject.transform_tiny(v);
+
+		v.z += ViewportNear;
+
+		p.transform_tiny(v);
+		mView.transform_tiny(v);
+		return v;
+	}
+
+	Fvector& world_to_hud(Fvector& v)
+	{
+		return world_to_hud(v, mProjectHud);
+	}
+
+	Fvector& world_to_hud_dir(Fvector& v, const Fmatrix& p)
+	{
+		mInvView.transform_dir(v);
+		mInvProject.transform_dir(v);
+
+		p.transform_dir(v);
+		mView.transform_dir(v);
+
+		return v;
+	}
+
+	Fvector& world_to_hud_dir(Fvector& v)
+	{
+		return world_to_hud_dir(v, mProjectHud);
+	}
+
+	Fmatrix& world_to_hud(Fmatrix& m, const Fmatrix& p)
+	{
+		world_to_hud(m.c, p);
+		world_to_hud_dir(m.i, p).normalize();
+		world_to_hud_dir(m.j, p).normalize();
+		world_to_hud_dir(m.k, p).normalize();
+		return m;
+	}
+
+	Fmatrix& world_to_hud(Fmatrix& m)
+	{
+		return world_to_hud(m, mProjectHud);
+	}
+
 	// Multi-threading
 	xrCriticalSection mt_csEnter;
 	xrCriticalSection mt_csLeave;
@@ -334,7 +472,26 @@ public:
 		return frame_timer.GetElapsed_ms();
 	}
 
+	// demonized: Perceivable distance depending on FOV, so that objects will behave normal in binoculars
+	IC float GetPerceivedDist(const Fvector& p, float* real_dist = nullptr)
+	{
+		float dist = vCameraPosition.distance_to(p);
+		float fov_rad = deg2rad(fFOV);
+		float perceived_dist = dist * tanf(fov_rad * 0.5f);
+		if (real_dist) *real_dist = dist;
+		return perceived_dist;
+	}
+
+	IC float CalcSSADynamic(const Fvector& C, float R)
+	{
+		Fvector4 v_res1, v_res2;
+		mFullTransform.transform(v_res1, C);
+		mFullTransform.transform(v_res2, Fvector(C).mad(vCameraRight, R));
+		return v_res1.sub(v_res2).magnitude();
+	}
+
 public:
+	void prepare_matrices();
 	void xr_stdcall on_idle();
 	bool xr_stdcall on_message(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT& result);
 
@@ -343,6 +500,13 @@ private:
 	virtual void _BCL AddSeqFrame(pureFrame* f, bool mt);
 	virtual void _BCL RemoveSeqFrame(pureFrame* f);
 	virtual CStatsPhysics* _BCL StatPhysics() { return Statistic; }
+
+private:
+	xr_imgui::ide m_imgui;
+
+public:
+	xr_imgui::ide& imgui() { return m_imgui; }
+	bool imgui_shown() const { return m_imgui.is_shown(); }
 #ifdef INGAME_EDITOR
 public:
     IC editor::ide* editor() const { return m_editor; }

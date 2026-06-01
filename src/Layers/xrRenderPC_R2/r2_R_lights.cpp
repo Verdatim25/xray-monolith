@@ -16,8 +16,8 @@ IC void hud_light_apply(xr_map<light*, std::pair<Fvector, Fvector>>& saved_pos, 
 
 		saved_pos.emplace(L, mk_pair(L->position, L->direction));
 
-		Fvector::hud_to_world(L->position);
-		Fvector::hud_to_world_dir(L->direction);
+		Device.hud_to_world(L->position);
+		Device.hud_to_world_dir(L->direction);
 	}
 }
 
@@ -200,11 +200,10 @@ void CRender::render_lights(light_Package& LP)
 			{
 				Target->accum_spot(L_spot_s[it]);
 				render_indirect(L_spot_s[it]);
-			}
 
-			if (RImplementation.o.advancedpp && ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS))
-				for (u32 it = 0; it < L_spot_s.size(); it++)
+				if (RImplementation.o.advancedpp && ps_r2_ls_flags.is(R2FLAG_VOLUMETRIC_LIGHTS))
 					Target->accum_volumetric(L_spot_s[it]);
+			}					
 
 			L_spot_s.clear();
 		}

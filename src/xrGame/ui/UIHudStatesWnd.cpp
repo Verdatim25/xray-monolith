@@ -360,6 +360,9 @@ void CUIHudStatesWnd::UpdateHealth(CActor* actor)
 void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
 {
 	PIItem item = actor->inventory().ActiveItem();
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(actor->Holder());
+#endif
 	if (item)
 	{
 		if (m_b_force_update)
@@ -414,6 +417,34 @@ void CUIHudStatesWnd::UpdateActiveItemInfo(CActor* actor)
 		}
 		//-Alundaio
 	}
+#ifdef STATIONARYMGUN_NEW
+	else if (stm)
+	{
+		stm->GetBriefInfo(m_item_info);
+
+		SetAmmoIcon(m_item_info.icon.c_str());
+		m_fire_mode->SetText(m_item_info.fire_mode.c_str());
+
+		m_ui_weapon_cur_ammo->SetText(m_item_info.cur_ammo.c_str());
+		m_ui_weapon_fmj_ammo->SetText(m_item_info.fmj_ammo.c_str());
+		m_ui_weapon_ap_ammo->SetText(m_item_info.ap_ammo.c_str());
+		m_ui_weapon_third_ammo->SetText(m_item_info.third_ammo.c_str());
+
+		if (stm->m_ammoType == 0)
+			m_ui_weapon_fmj_ammo->SetTextColor(color_rgba(238, 155, 23, 255));
+		else if (stm->m_ammoType == 1)
+			m_ui_weapon_ap_ammo->SetTextColor(color_rgba(238, 155, 23, 255));
+		else if (stm->m_ammoType == 2)
+			m_ui_weapon_third_ammo->SetTextColor(color_rgba(238, 155, 23, 255));
+
+		m_ui_weapon_cur_ammo->Show(true);
+		m_ui_weapon_fmj_ammo->Show(true);
+		m_ui_weapon_ap_ammo->Show(true);
+		m_ui_weapon_third_ammo->Show(true);
+		m_fire_mode->Show(true);
+		m_ui_grenade->Show(false);
+	}
+#endif
 	else
 	{
 		m_ui_weapon_icon->Show(false);
@@ -596,12 +627,12 @@ void CUIHudStatesWnd::UpdateZones()
 			if (dist_to_zone < rad_zone)
 			{
 				fRelPow *= 0.3f;
-				fRelPow *= (2.5f - 2.0f * power); // çâóê çàâèñèò îò ñèëû çîíû
+				fRelPow *= (2.5f - 2.0f * power); // Ð·Ð²ÑƒÐº Ð·Ð°Ð²Ð¸ÑÐ¸Ñ‚ Ð¾Ñ‚ ÑÐ¸Ð»Ñ‹ Ð·Ð¾Ð½Ñ‹
 			}
 		}
 		clamp(fRelPow, 0.0f, 1.0f);
 
-		//îïðåäåëèòü òåêóùóþ ÷àñòîòó ñðàáàòûâàíèÿ ñèãíàëà
+		//Ð¾Ð¿Ñ€ÐµÐ´ÐµÐ»Ð¸Ñ‚ÑŒ Ñ‚ÐµÐºÑƒÑ‰ÑƒÑŽ Ñ‡Ð°ÑÑ‚Ð¾Ñ‚Ñƒ ÑÑ€Ð°Ð±Ð°Ñ‚Ñ‹Ð²Ð°Ð½Ð¸Ñ ÑÐ¸Ð³Ð½Ð°Ð»Ð°
 		zone_info.cur_period = zone_type->freq.x + (zone_type->freq.y - zone_type->freq.x) * (fRelPow * fRelPow);
 
 		//string256	buff_z;
@@ -610,7 +641,7 @@ void CUIHudStatesWnd::UpdateZones()
 		if (zone_info.snd_time > zone_info.cur_period)
 		{
 			zone_info.snd_time = 0.0f;
-			luabind::functor<bool> funct;
+			::luabind::functor<bool> funct;
 			if (ai().script_engine().functor("_G.CZone_Touch", funct))
 			{
 				if (funct(pZone->lua_game_object()))

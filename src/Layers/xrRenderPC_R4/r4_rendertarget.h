@@ -76,6 +76,9 @@ public:
 	IBlender* b_hdao_msaa_cs;
 
 	// [SSS Stuff]
+	IBlender* b_ssfx_fog_scattering;
+	IBlender* b_ssfx_motion_blur;
+	IBlender* b_ssfx_taa;
 	IBlender* b_ssfx_rain;
 	IBlender* b_ssfx_water_blur;
 	IBlender* b_ssfx_bloom_downsample;
@@ -97,6 +100,10 @@ public:
 	xr_vector<dbg_line_t>										dbg_lines;
 	xr_vector<Fplane>												dbg_planes;
 #endif
+
+	// HW baseRT/baseZB
+	ID3D11RenderTargetView* baseRT;
+	ID3D11DepthStencilView* baseZB;
 
 	// MRT-path
 	ref_rt rt_Depth; // Z-buffer like - initial depth
@@ -131,15 +138,12 @@ public:
 
 	ref_rt rt_blur_h_2;
 	ref_rt rt_blur_2;
-	ref_rt rt_blur_2_zb;
 
 	ref_rt rt_blur_h_4;
 	ref_rt rt_blur_4;
-	ref_rt rt_blur_4_zb;
 
 	ref_rt rt_blur_h_8;
 	ref_rt rt_blur_8;
-	ref_rt rt_blur_8_zb;
 
 	ref_rt rt_pp_bloom;
 
@@ -160,6 +164,8 @@ public:
 	// HDR10
 	ref_rt rt_HDR10_HalfRes[2];
 
+	ref_texture t_reticle;
+
 	// env
 	ref_texture t_envmap_0; // env-0
 	ref_texture t_envmap_1; // env-1
@@ -178,7 +184,7 @@ public:
 	ref_rt rt_ssfx_temp3;
 
 	ref_rt rt_ssfx_accum;
-	ref_rt rt_ssfx_hud;
+	//ref_rt rt_ssfx_hud; // DEPRECATED
 	ref_rt rt_ssfx_ssr;
 	ref_rt rt_ssfx_water;
 	ref_rt rt_ssfx_water_waves;
@@ -208,21 +214,28 @@ public:
 	ref_rt rt_ssfx_bloom_tmp8_2;
 	ref_rt rt_ssfx_bloom_tmp4_2;
 
+	ref_rt rt_ssfx_taa;
+	ref_rt rt_ssfx_prev_frame;
+	ref_rt rt_ssfx_motion_vectors;
+
 	ref_rt rt_ssfx_prevPos;
 
 	ref_shader s_ssfx_water;
 	ref_shader s_ssfx_water_blur;
 	ref_shader s_ssfx_water_ssr;
 	ref_shader s_ssfx_ao;
-	ref_shader s_ssfx_hud[5];
+	//ref_shader s_ssfx_hud[5]; // SSS23: DEPRECATED
 
-	Fmatrix Matrix_previous, Matrix_current;
-	Fmatrix Matrix_HUD_previous, Matrix_HUD_current;
-	Fvector3 Position_previous;
-	bool RVelocity;
+	struct PreviousData {
+		Fmatrix Matrix_previous, Matrix_current;
+		Fmatrix Matrix_HUD_previous, Matrix_HUD_current;
+		Fvector3 Position_previous;
+	} Previous[2];	
 
-	ref_rt rt_tempzb; // Redotix99: for 3D Shader Based Scopes
-
+	PreviousData* GetPrevious() {
+		return &Previous[Device.m_SecondViewport.IsSVPFrame()];
+	}
+	
 	ref_shader s_ssfx_dumb;
 
 	//	Igor: for async screenshots
@@ -236,8 +249,15 @@ public:
 	ref_texture t_noise [TEX_jitter_count];
 	ID3DTexture2D* t_noise_surf_mipped;
 	ref_texture t_noise_mipped;
+
+
+	ref_shader s_scope_color_write;
+	ref_shader s_scope_depth_write;
 private:
 	// OCCq
+
+	ref_rt rt_baseRT;
+	ref_rt rt_baseZB;
 
 	ref_shader s_occq;
 	ref_shader s_sunshafts;
@@ -267,6 +287,8 @@ private:
 	ref_shader s_gasmask_dudv;
 	ref_shader s_nightvision;
 	ref_shader s_fakescope; //crookr
+	ref_shader s_distort;
+	ref_shader s_scope_debug;
 	ref_shader s_heatvision; //--DSR-- HeatVision
 	ref_shader s_smaa;
 
@@ -288,6 +310,9 @@ private:
 	ref_shader s_accum_volume_msaa[8];
 
 	// Screen Space Shaders Stuff
+	ref_shader s_ssfx_fog_scattering;
+	ref_shader s_ssfx_motion_blur;
+	ref_shader s_ssfx_taa;
 	ref_shader s_ssfx_rain;
 	ref_shader s_ssfx_bloom;
 	ref_shader s_ssfx_bloom_lens;
@@ -359,6 +384,13 @@ public:
 	ref_geom g_postprocess;
 	ref_shader s_menu;
 	ref_geom g_menu;
+
+	bool bDistort;
+	bool bCaptureScopeLens;
+
+	// The size at creation
+	const u32 Width;
+	const u32 Height;
 private:
 	float im_noise_time;
 	u32 im_noise_shift_w;
@@ -383,9 +415,13 @@ private:
 	//	Igor: used for volumetric lights
 	bool m_bHasActiveVolumetric;
 	bool m_bHasActiveVolumetric_spot;
+
+	xr_list<std::pair<ref_texture,ref_rt>> RenderTargetRemaps;
 public:
 	CRenderTarget();
+	CRenderTarget(LPCSTR name, u32 width, u32 height);
 	~CRenderTarget();
+	void SetActive(bool force = false);
 	void accum_point_geom_create();
 	void accum_point_geom_destroy();
 	void accum_omnip_geom_create();
@@ -399,6 +435,7 @@ public:
 	void u_stencil_optimize(eStencilOptimizeMode eSOM = SO_Light);
 	void u_compute_texgen_screen(Fmatrix& dest);
 	void u_compute_texgen_jitter(Fmatrix& dest);
+	void u_setrt(const ref_rt& _1, const ref_rt& _2, const ref_rt& _3, const ref_rt& _4, ID3DDepthStencilView* zb);
 	void u_setrt(const ref_rt& _1, const ref_rt& _2, const ref_rt& _3, ID3DDepthStencilView* zb);
 	void u_setrt(const ref_rt& _1, const ref_rt& _2, ID3DDepthStencilView* zb);
 	void u_setrt(u32 W, u32 H, ID3DRenderTargetView* _1, ID3DRenderTargetView* _2, ID3DRenderTargetView* _3,
@@ -417,8 +454,13 @@ public:
 	void phase_gasmask_dudv();
 	void phase_nightvision();
 	void phase_fakescope(); //crookr
-	void phase_heatvision(); //--DSR-- HeatVision
+	void phase_heatvision();
+	void draw_reflex();
+	//--DSR-- HeatVision
+	void draw_scope(ref_shader e, std::function<void(R_dsgraph::mapSorted_Node* N)> bind);
 	void phase_3DSSReticle(); // Redotix99: for 3D Shader Based Scopes
+	void phase_apply_distortion();
+	void phase_svp_capture();
 	void phase_lut();
 	void phase_smaa();
 	void phase_scene_prepare();
@@ -428,10 +470,11 @@ public:
 	void phase_ssao();
 	void phase_hdao();
 	void phase_downsamp();
+	void phase_scope_debug();
 	void phase_wallmarks();
-	void phase_smap_direct(light* L, u32 sub_phase);
+	void phase_smap_direct(light* L, ref_rt smap, u32 sub_phase);
 	void phase_smap_direct_tsh(light* L, u32 sub_phase);
-	void phase_smap_spot_clear();
+	void phase_smap_spot_clear(ref_rt smap);
 	void phase_smap_spot(light* L);
 	void phase_smap_spot_tsh(light* L);
 	void phase_accumulator();
@@ -439,6 +482,9 @@ public:
 	void shadow_direct(light* L, u32 dls_phase);
 
 	// SSS Stuff
+	void phase_ssfx_taa();
+	void phase_ssfx_motion_blur();
+	void phase_ssfx_fog_scattering();
 	void phase_ssfx_rain(); // Bloom PP
 	void phase_ssfx_bloom(); // Bloom PP
 	void phase_ssfx_sss(); // SSS

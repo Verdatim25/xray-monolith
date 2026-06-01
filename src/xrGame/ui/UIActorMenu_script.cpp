@@ -29,6 +29,7 @@
 #include "UIZoneMap.h"
 #include "UIMotionIcon.h"
 #include "UIHudStatesWnd.h"
+#include "UIMessagesWindow.h"
 
 using namespace luabind;
 
@@ -45,6 +46,11 @@ CUIPdaWnd* GetPDAMenu()
 CUIMainIngameWnd* GetMainGameMenu()
 {
 	return CurrentGameUI()->UIMainIngameWnd;
+}
+
+CUIMessagesWindow* GetMessagesMenu()
+{
+	return CurrentGameUI()->m_pMessagesWnd;
 }
 
 u8 GrabMenuMode()
@@ -79,7 +85,7 @@ bool CUIActorMenu::CanRepairItem(PIItem item)
 
 	LPCSTR partner = m_pPartnerInvOwner->CharacterInfo().Profile().c_str();
 
-	luabind::functor<bool> funct;
+	::luabind::functor<bool> funct;
 	R_ASSERT2(
 		ai().script_engine().functor("inventory_upgrades.can_repair_item", funct),
 		make_string("Failed to get functor <inventory_upgrades.can_repair_item>, item = %s", item_name)
@@ -93,7 +99,7 @@ LPCSTR CUIActorMenu::RepairQuestion(PIItem item, bool can_repair)
 {
 	LPCSTR partner = m_pPartnerInvOwner->CharacterInfo().Profile().c_str();
 	LPCSTR item_name = item->m_section_id.c_str();
-	luabind::functor<LPCSTR> funct2;
+	::luabind::functor<LPCSTR> funct2;
 	R_ASSERT2(
 		ai().script_engine().functor("inventory_upgrades.question_repair_item", funct2),
 		make_string("Failed to get functor <inventory_upgrades.question_repair_item>, item = %s", item_name)
@@ -115,7 +121,7 @@ void CUIActorMenu::TryRepairItem(CUIWindow* w, void* d)
 
 	bool can_repair = CanRepairItem(item);
 
-	luabind::functor<bool> funct;
+	::luabind::functor<bool> funct;
 	R_ASSERT2(
 		ai().script_engine().functor("inventory_upgrades.can_afford_repair_item", funct),
 		make_string("Failed to get functor <inventory_upgrades.can_afford_repair_item>, item = %s", item_name)
@@ -143,7 +149,7 @@ void CUIActorMenu::RepairEffect_CurItem()
 	}
 	LPCSTR item_name = item->m_section_id.c_str();
 
-	luabind::functor<void> funct;
+	::luabind::functor<void> funct;
 	R_ASSERT(ai().script_engine().functor( "inventory_upgrades.effect_repair_item", funct ));
 	funct(item_name, item->GetCondition());
 
@@ -161,7 +167,7 @@ bool CUIActorMenu::CanUpgradeItem(PIItem item)
 	LPCSTR item_name = item->m_section_id.c_str();
 	LPCSTR partner = m_pPartnerInvOwner->CharacterInfo().Profile().c_str();
 
-	luabind::functor<bool> funct;
+	::luabind::functor<bool> funct;
 	R_ASSERT2(
 		ai().script_engine().functor( "inventory_upgrades.can_upgrade_item", funct ),
 		make_string( "Failed to get functor <inventory_upgrades.can_upgrade_item>, item = %s, mechanic = %s", item_name,
@@ -174,7 +180,7 @@ bool CUIActorMenu::CanUpgradeItem(PIItem item)
 void CUIActorMenu::CurModeToScript()
 {
 	int mode = (int)m_currMenuMode;
-	luabind::functor<void> funct;
+	::luabind::functor<void> funct;
 	R_ASSERT(ai().script_engine().functor( "actor_menu.actor_menu_mode", funct ));
 	funct(mode);
 }
@@ -234,7 +240,7 @@ void CUIActorMenu::HighlightSectionInSlot(LPCSTR section, u8 type, u16 slot_id)
 }
 
 
-void CUIActorMenu::HighlightForEachInSlot(const luabind::functor<bool>& functor, u8 type, u16 slot_id)
+void CUIActorMenu::HighlightForEachInSlot(const ::luabind::functor<bool>& functor, u8 type, u16 slot_id)
 {
 	if (!functor)
 		return;
@@ -332,6 +338,8 @@ void CUIActorMenu::script_register(lua_State* L)
 		.def("SetActiveDialog", &CUIPdaWnd::SetActiveDialog)
 		.def("GetActiveDialog", &CUIPdaWnd::GetActiveDialog)
 		.def("GetActiveSection", &CUIPdaWnd::GetActiveSection)
+		.def("SetPdaXml", &CUIPdaWnd::SetPdaXml)
+		.def("GetPdaXml", &CUIPdaWnd::GetPdaXml)
 		.def("GetTabControl", &CUIPdaWnd::GetTabControl),
 
 		class_<CUIMainIngameWnd, CUIWindow>("CUIMainIngameWnd")
@@ -355,7 +363,12 @@ void CUIActorMenu::script_register(lua_State* L)
 		.def_readonly("m_ind_boost_weight", &CUIMainIngameWnd::m_ind_boost_weight)
 		.def_readonly("m_ind_boost_health", &CUIMainIngameWnd::m_ind_boost_health)
 		.def_readonly("m_ind_boost_power", &CUIMainIngameWnd::m_ind_boost_power)
-		.def_readonly("m_ind_boost_rad", &CUIMainIngameWnd::m_ind_boost_rad),
+		.def_readonly("m_ind_boost_rad", &CUIMainIngameWnd::m_ind_boost_rad)
+		.def("GetQuickSlotIcons", &CUIMainIngameWnd::GetQuickSlotIconsScript)
+		.def_readonly("m_QuickSlotText1", &CUIMainIngameWnd::m_QuickSlotText1)
+		.def_readonly("m_QuickSlotText2", &CUIMainIngameWnd::m_QuickSlotText2)
+		.def_readonly("m_QuickSlotText3", &CUIMainIngameWnd::m_QuickSlotText3)
+		.def_readonly("m_QuickSlotText4", &CUIMainIngameWnd::m_QuickSlotText4),
 
 		class_<CUIZoneMap>("CUIZoneMap")
 		.def(constructor<>())
@@ -365,6 +378,9 @@ void CUIActorMenu::script_register(lua_State* L)
 		.def("Background", &CUIZoneMap::Background),
 
 		class_<CUIMotionIcon, CUIWindow>("CUIMotionIcon")
+		.def(constructor<>()),
+
+		class_<CUIMessagesWindow, CUIWindow>("CUIMessagesWindow")
 		.def(constructor<>()),
 
 		class_<CUIHudStatesWnd, CUIWindow>("CUIHudStatesWnd")
@@ -395,6 +411,9 @@ void CUIActorMenu::script_register(lua_State* L)
 		def("get_pda_menu", &GetPDAMenu),
 		def("get_actor_menu", &GetActorMenu),
 		def("get_menu_mode", &GrabMenuMode),
-		def("get_maingame", &GetMainGameMenu)
+		def("get_maingame", &GetMainGameMenu),
+
+		// NLTP_ASHES
+		def("get_messages_menu", &GetMessagesMenu)
 	];
 }

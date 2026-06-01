@@ -192,12 +192,12 @@ void	SFillPropData::load			()
 	xr_delete				(Ini);
 #endif // XRGAME_EXPORTS
 
-	luabind::object			table;
+	::luabind::object			table;
 	R_ASSERT				(ai().script_engine().function_object("smart_covers.descriptions", table, LUA_TTABLE));
-	luabind::object::iterator	I = table.begin();
-	luabind::object::iterator	E = table.end();
+	::luabind::object::iterator	I = table.begin();
+	::luabind::object::iterator	E = table.end();
 	for ( ; I != E; ++I)
-		smart_covers.push_back	(luabind::object_cast<LPCSTR>(I.key()));
+		smart_covers.push_back	(::luabind::object_cast<LPCSTR>(I.key()));
 
 	std::sort				(smart_covers.begin(), smart_covers.end(), logical_string_predicate());
 };
@@ -1591,17 +1591,34 @@ bool CSE_ALifeObjectHangingLamp::validate()
 	return (false);
 }
 
+BOOL alifeObjectHangingLampIgnoreMatchConfiguration = FALSE;
 bool CSE_ALifeObjectHangingLamp::match_configuration() const
 {
-	R_ASSERT3(flags.test(flR1) || flags.test(flR2), "no renderer type set for hanging-lamp ", name_replace());
+	if (alifeObjectHangingLampIgnoreMatchConfiguration)
+	{
+		auto gen = ::Render->get_generation();
+
+		if (flags.test(flR2) && gen >= IRender_interface::GENERATION_R2)
+			return true;
+
+		if (flags.test(flR1) && gen == IRender_interface::GENERATION_R1)
+			return true;
+
+		Msg("![CSE_ALifeObjectHangingLamp::match_configuration] Hanging lamp '%s' has no valid render flag (R1/R2/TypeSpot). Allowing anyway.", name_replace());
+		return true;
+	}
+	else
+	{
+		R_ASSERT3(flags.test(flR1) || flags.test(flR2), "no renderer type set for hanging-lamp ", name_replace());
 #ifdef XRGAME_EXPORTS
-	return (
-		(flags.test(flR1) && (::Render->get_generation() == IRender_interface::GENERATION_R1)) ||
-		(flags.test(flR2) && (::Render->get_generation() == IRender_interface::GENERATION_R2))
-	);
+		return (
+			(flags.test(flR1) && (::Render->get_generation() == IRender_interface::GENERATION_R1)) ||
+			(flags.test(flR2) && (::Render->get_generation() == IRender_interface::GENERATION_R2))
+			);
 #else
-	return						(true);
+		return						(true);
 #endif
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -2108,8 +2125,16 @@ void CSE_ALifeMountedWeapon::FillProps			(LPCSTR pref, PropItemVec& values)
 }
 #endif // #ifndef XRGAME_EXPORTS
 
+#ifdef STATIONARYMGUN_NEW
+CSE_ALifeStationaryMgun::CSE_ALifeStationaryMgun(LPCSTR caSection) : CSE_ALifeDynamicObjectVisual(caSection), CSE_PHSkeleton(caSection)
+#else
 CSE_ALifeStationaryMgun::CSE_ALifeStationaryMgun(LPCSTR caSection) : CSE_ALifeDynamicObjectVisual(caSection)
+#endif
 {
+#ifdef STATIONARYMGUN_NEW
+	ammo_type = 0;
+	a_elapsed = 0;
+#endif
 }
 
 CSE_ALifeStationaryMgun::~CSE_ALifeStationaryMgun()
@@ -2118,35 +2143,195 @@ CSE_ALifeStationaryMgun::~CSE_ALifeStationaryMgun()
 
 void CSE_ALifeStationaryMgun::UPDATE_Read(NET_Packet& tNetPacket)
 {
+#ifdef STATIONARYMGUN_NEW
+	inherited1::UPDATE_Read(tNetPacket);
+	inherited2::UPDATE_Read(tNetPacket);
+#else
 	inherited::UPDATE_Read(tNetPacket);
+#endif
 	m_bWorking = !!tNetPacket.r_u8();
 	load_data(m_destEnemyDir, tNetPacket);
+
+#ifdef STATIONARYMGUN_NEW
+	ammo_type = tNetPacket.r_u8();
+	a_elapsed = tNetPacket.r_u16();
+
+	u16 num = tNetPacket.r_u16();
+	if (m_barrels.size() != num)
+	{
+		m_barrels.clear();
+		for (int idx = 0; idx < num; idx++)
+		{
+			m_barrels.push_back(SBarrel());
+		}
+	}
+	for (int idx = 0; idx < num; idx++)
+	{
+		m_barrels.at(idx).read(tNetPacket);
+	}
+#endif
 }
 
 void CSE_ALifeStationaryMgun::UPDATE_Write(NET_Packet& tNetPacket)
 {
+#ifdef STATIONARYMGUN_NEW
+	inherited1::UPDATE_Write(tNetPacket);
+	inherited2::UPDATE_Write(tNetPacket);
+#else
 	inherited::UPDATE_Write(tNetPacket);
+#endif
 	tNetPacket.w_u8(m_bWorking ? 1 : 0);
 	save_data(m_destEnemyDir, tNetPacket);
+
+#ifdef STATIONARYMGUN_NEW
+	tNetPacket.w_u8(ammo_type);
+	tNetPacket.w_u16(a_elapsed);
+
+	u16 num = m_barrels.size();
+	tNetPacket.w_u16(num);
+	for (int idx = 0; idx < num; idx++)
+	{
+		m_barrels.at(idx).write(tNetPacket);
+	}
+#endif
 }
 
+#ifdef STATIONARYMGUN_NEW
+bool CSE_ALifeStationaryMgun::can_save() const
+{
+	return CSE_PHSkeleton::need_save();
+}
+
+void CSE_ALifeStationaryMgun::load(NET_Packet &tNetPacket)
+{
+	inherited1::load(tNetPacket);
+	inherited2::load(tNetPacket);
+}
+
+void CSE_ALifeStationaryMgun::data_load(NET_Packet &tNetPacket)
+{
+	inherited2::data_load(tNetPacket);
+	tNetPacket.r_vec3(o_Position);
+	tNetPacket.r_vec3(o_Angle);
+}
+
+void CSE_ALifeStationaryMgun::data_save(NET_Packet &tNetPacket)
+{
+	inherited2::data_save(tNetPacket);
+	tNetPacket.w_vec3(o_Position);
+	tNetPacket.w_vec3(o_Angle);
+}
+#endif
 
 void CSE_ALifeStationaryMgun::STATE_Read(NET_Packet& tNetPacket, u16 size)
 {
+#ifdef STATIONARYMGUN_NEW
+	inherited1::STATE_Read(tNetPacket, size);
+	inherited2::STATE_Read(tNetPacket, size);
+
+#ifdef STATIONARYMGUN_NEW
+	ammo_type = tNetPacket.r_u8();
+	a_elapsed = tNetPacket.r_u16();
+
+	u16 num = tNetPacket.r_u16();
+	if (m_barrels.size() != num)
+	{
+		m_barrels.clear();
+		for (int idx = 0; idx < num; idx++)
+		{
+			m_barrels.push_back(SBarrel());
+		}
+	}
+	for (int idx = 0; idx < num; idx++)
+	{
+		m_barrels.at(idx).read(tNetPacket);
+	}
+#endif
+#else
 	inherited::STATE_Read(tNetPacket, size);
+#endif
 }
 
 void CSE_ALifeStationaryMgun::STATE_Write(NET_Packet& tNetPacket)
 {
+#ifdef STATIONARYMGUN_NEW
+	inherited1::STATE_Write(tNetPacket);
+	inherited2::STATE_Write(tNetPacket);
+
+#ifdef STATIONARYMGUN_NEW
+	tNetPacket.w_u8(ammo_type);
+	tNetPacket.w_u16(a_elapsed);
+
+	u16 num = m_barrels.size();
+	tNetPacket.w_u16(num);
+	for (int idx = 0; idx < num; idx++)
+	{
+		m_barrels.at(idx).write(tNetPacket);
+	}
+#endif
+#else
 	inherited::STATE_Write(tNetPacket);
+#endif
 }
 
 #ifndef XRGAME_EXPORTS
 void CSE_ALifeStationaryMgun::FillProps			(LPCSTR pref, PropItemVec& values)
 {
+#ifdef STATIONARYMGUN_NEW
+	inherited1::FillProps			(pref,values);
+	inherited2::FillProps			(pref,values);
+#else
 	inherited::FillProps			(pref,values);
+#endif
 }
 #endif // #ifndef XRGAME_EXPORTS
+
+#ifdef STATIONARYMGUN_NEW
+bool CSE_ALifeStationaryMgun::used_ai_locations() const
+{
+	return false;
+}
+
+u16 CSE_ALifeStationaryMgun::get_ammo_magsize()
+{
+	return READ_IF_EXISTS(pSettings, r_u16, s_name.c_str(), "ammo_mag_size", 0);
+}
+
+u16 CSE_ALifeStationaryMgun::get_ammo_elapsed()
+{
+	return ((u16)a_elapsed);
+}
+
+void CSE_ALifeStationaryMgun::set_ammo_elapsed(u16 count)
+{
+	a_elapsed = count;
+}
+
+u8 CSE_ALifeStationaryMgun::get_ammo_type()
+{
+	return ((u8)ammo_type);
+}
+
+void CSE_ALifeStationaryMgun::set_ammo_type(u8 type)
+{
+	ammo_type = type;
+}
+
+CSE_ALifeStationaryMgun::SBarrel::SBarrel()
+{
+	a_elapsed = 0;
+}
+
+void CSE_ALifeStationaryMgun::SBarrel::read(NET_Packet &P)
+{
+	a_elapsed = P.r_u16();
+}
+
+void CSE_ALifeStationaryMgun::SBarrel::write(NET_Packet &P)
+{
+	P.w_u16(a_elapsed);
+}
+#endif
 
 ////////////////////////////////////////////////////////////////////////////
 // CSE_ALifeTeamBaseZone

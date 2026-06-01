@@ -114,6 +114,8 @@ public:
 	DWORD dummy1; //	Padding to avoid warning	
 	DWORD dummy2; //	Padding to avoid warning	
 #endif
+	
+	void Invalidate();
 private:
 	// Render-targets
 	ID3DRenderTargetView* pRT[4];
@@ -194,7 +196,6 @@ private:
 	CMatrix*						matrices	[8	];	// matrices are supported only for FFP
 #endif
 
-	void Invalidate();
 public:
 	struct _stats
 	{
@@ -254,6 +255,11 @@ public:
 	IC void set_xform_world(const Fmatrix& M);
 	IC void set_xform_view(const Fmatrix& M);
 	IC void set_xform_project(const Fmatrix& M);
+
+	IC void set_xform_world_prev(const Fmatrix& M);
+	IC void set_xform_view_prev(const Fmatrix& M);
+	IC void set_xform_project_prev(const Fmatrix& M);
+
 	IC const Fmatrix& get_xform_world();
 	IC const Fmatrix& get_xform_view();
 	IC const Fmatrix& get_xform_project();

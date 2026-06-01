@@ -79,7 +79,10 @@ extern u64 g_qwEStartGameTime;
 ENGINE_API
 extern float psHUD_FOV_def;
 extern float psSqueezeVelocity;
+
+// Lua
 extern int psLUA_GCSTEP;
+extern BOOL lua_debug;
 
 float g_end_modif = 0.f;
 
@@ -115,6 +118,8 @@ extern BOOL g_ai_die_in_anomaly; //Alundaio
 
 extern BOOL g_telekinetic_objects_include_corpses; // Tosox
 
+extern BOOL binoculars_dynamic_zoom_check; //VodoXleb
+
 extern BOOL g_allow_weapon_control_inertion_factor; // momopate
 extern BOOL g_allow_outfit_control_inertion_factor;
 extern BOOL g_render_short_tracers;
@@ -135,21 +140,107 @@ extern BOOL pda_map_zoom_in_to_mouse;
 extern BOOL pda_map_zoom_out_to_mouse;
 extern BOOL mouseWheelChangeWeapon;
 extern BOOL mouseWheelInvertZoom;
+extern BOOL mouseWheelInvertChangeWeapons;
 extern BOOL monsterStuckFix;
 extern BOOL logTimestamps;
 extern float f_Freelook_cam_limit;
 extern int MOUSEBUFFERSIZE;
 extern int KEYBOARDBUFFERSIZE;
 extern BOOL print_bone_warnings;
+extern BOOL print_dltx_warnings;
 extern BOOL poltergeist_spawn_corpse_on_death;
 extern BOOL useNewZoomDeltaAlgorithm;
 extern BOOL g_aimmode_remember;
 extern BOOL g_freelook_while_reloading;
 extern BOOL useSeparateUBGLKeybind;
-extern float g_gunsnd_indoor;
-extern float g_gunsnd_indoor_volume;
+extern int g_nearwall;
+extern int g_nearwall_trace;
+extern BOOL drawPickupItemNames;
+extern BOOL fun_allowed;
+extern BOOL progressiveStaminaCost;
+extern BOOL NPCsLookAtActor;
+extern float NPCsLookAtActorMinDistance;
+extern BOOL interruptFireOnAimToggle;
+
+extern BOOL mt_UpdateWeaponSounds;
+
+extern BOOL alifeObjectHangingLampIgnoreMatchConfiguration;
+
+extern BOOL spawn_antifreeze;
+extern BOOL spawn_antifreeze_debug;
+
+extern float IK_CALC_DIST;
+extern float IK_CALC_SSA;
+extern float IK_ALWAYS_CALC_DIST;
+extern BOOL r_optimize_calculate_bones;
+
+extern CrosshairSettings g_crosshair_camera_near;
+extern CrosshairSettings g_crosshair_camera_far;
+extern CrosshairSettings g_crosshair_weapon_near;
+extern CrosshairSettings g_crosshair_weapon_far;
+extern CrosshairSettings g_crosshair_device_near;
+extern CrosshairSettings g_crosshair_device_far;
+
+#define Concat2(a, b) #a ## b
+#define Concat3(a, b, c) #a ## b ## #c
+
+#define CrosshairBaseCommands(crosshair, suffix) \
+	CMD3(CCC_Mask, Concat2(g_crosshair_, suffix), &crosshair.flags, CROSSHAIR_SHOW); \
+	CMD3(CCC_Mask, Concat3(g_crosshair_, suffix, _recon), &crosshair.flags, CROSSHAIR_RECON); \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _recon_max_opacity), &crosshair.recon_max_opacity, 0.f, 1.f); \
+	CMD3(CCC_Mask, Concat3(g_crosshair_, suffix, _use_shader), &crosshair.flags, CROSSHAIR_USE_SHADER); \
+	CMD3(CCC_String, Concat3(g_crosshair_, suffix, _shader ), crosshair.shader, 32); \
+	CMD3(CCC_String, Concat3(g_crosshair_, suffix, _texture), crosshair.texture, 32); \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _size), &crosshair.size, 1.f, 64.f); \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _depth), &crosshair.depth, 0.f, 300.f); \
+	CMD2(CCC_Color, Concat3(g_crosshair_, suffix, _color), &crosshair.color);
+
+#define CrosshairDistanceCommands(crosshair, suffix) \
+	CMD3(CCC_Mask, Concat3(g_crosshair_, suffix, _distance_lerp), &crosshair.flags, CROSSHAIR_DISTANCE_LERP); \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _distance_lerp_rate), &crosshair.distance_lerp_rate, 1.f, 100.f);
+
+#define CrosshairOpacityCommands(crosshair, suffix) \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _occluded_opacity), &crosshair.occluded_opacity, 0.f, 1.f); \
+	CMD4(CCC_Float, Concat3(g_crosshair_, suffix, _occlusion_fade_rate), &crosshair.occlusion_fade_rate, 1.f, 100.f);
+
+#define CrosshairLineCommands(crosshair, suffix) \
+	CMD3(CCC_Mask, Concat3(g_crosshair_, suffix, _line), &crosshair.flags, CROSSHAIR_LINE);
+
+#define CrosshairCameraFarCommands(crosshair, suffix) \
+	CrosshairBaseCommands(crosshair, suffix);
+
+#define CrosshairCameraNearCommands(crosshair, suffix) \
+	CrosshairBaseCommands(crosshair, suffix); \
+	CrosshairDistanceCommands(crosshair, suffix);
+
+#define CrosshairFarCommands(crosshair, suffix) \
+	CrosshairBaseCommands(crosshair, suffix); \
+	CrosshairLineCommands(crosshair, suffix)
+
+#define CrosshairNearCommands(crosshair, suffix) \
+	CrosshairBaseCommands(crosshair, suffix); \
+	CrosshairDistanceCommands(crosshair, suffix); \
+	CrosshairOpacityCommands(crosshair, suffix); \
+	CrosshairLineCommands(crosshair, suffix)
+
+extern float recon_show_speed;
+extern float recon_hide_speed;
+extern float recon_mindist;
+extern float recon_maxdist;
+extern float recon_minspeed;
+extern float recon_maxspeed;
+
+extern float wallmark_range_static;
+extern float wallmark_range_skeleton;
 
 ENGINE_API extern float g_console_sensitive;
+
+extern BOOL g_auto_reload;
+extern BOOL g_fire_reloads_ubgl;
+extern BOOL g_launcher_dynamic_range;
+extern BOOL g_launcher_dynamic_range_zoom;
+extern BOOL g_launcher_dynamic_range_mode;
+extern float g_launcher_dynamic_range_max;
 
 u32 g_dead_body_collision = 1;
 
@@ -224,7 +315,8 @@ static void full_memory_stats()
 	u32		_game_lua = game_lua_memory_usage();
 	u32		_render = ::Render->memory_usage();
 #endif // SEVERAL_ALLOCATORS
-	int _eco_strings = (int)g_pStringContainer->stat_economy();
+    u32 _eco_strings_count = 0;
+	int _eco_strings = (int)g_pStringContainer->stat_economy(_eco_strings_count);
 	int _eco_smem = (int)g_pSharedMemoryContainer->stat_economy();
 	u32 m_base = 0, c_base = 0, m_lmaps = 0, c_lmaps = 0;
 
@@ -242,7 +334,8 @@ static void full_memory_stats()
 	Msg("* [x-ray]: process heap[%u K], game lua[%d K], render[%d K]", _process_heap / 1024, _game_lua / 1024, _render / 1024);
 #endif // SEVERAL_ALLOCATORS
 
-	Msg("* [x-ray]: economy: strings[%d K], smem[%d K]", _eco_strings / 1024, _eco_smem);
+	Msg("* [x-ray]: shared strings: memory[%ld K], count[%lu]", _eco_strings / 1024, _eco_strings_count);
+	Msg("* [x-ray]: shared memory: memory[%ld K]", _eco_smem);
 
 #ifdef FS_DEBUG
 	Msg("* [x-ray]: file mapping: memory[%d K], count[%d]", g_file_mapped_memory / 1024, g_file_mapped_count);
@@ -1066,7 +1159,7 @@ public:
 
 	virtual void Execute(LPCSTR)
 	{
-		LogFile->clear_not_free();
+		LogFile.clear_not_free();
 		FlushLog();
 		Msg("* Log file has been cleaned successfully!");
 	}
@@ -2352,8 +2445,10 @@ void CCC_RegisterCommands()
 	CMD3(CCC_Mask, "ai_dbg_lua", &psAI_Flags, aiLua);
 #endif // MASTER_GOLD
 
-        // Moved lua_gcstep outside of DEBUG to allow for easier experimentation.
+    // Moved lua_gcstep outside of DEBUG to allow for easier experimentation.
 	CMD4(CCC_Integer, "lua_gcstep", &psLUA_GCSTEP, 1, 1000);
+	CMD4(CCC_Integer, "lua_debug", &lua_debug, 0, 1);
+
 #ifdef DEBUG
 	CMD3(CCC_Mask, "ai_debug", &psAI_Flags, aiDebug);
 	CMD3(CCC_Mask, "ai_dbg_brain", &psAI_Flags, aiBrain);
@@ -2475,8 +2570,6 @@ void CCC_RegisterCommands()
 		//CMD3(CCC_Mask, "g_no_clip", &psActorFlags, AF_NO_CLIP);
 		CMD1(CCC_PHGravity, "ph_gravity");
 		CMD3(CCC_Mask, "log_missing_ini", &FS.m_Flags, FS.flPrintLTX);
-		CMD3(CCC_Mask, "g_firepos", &psActorFlags, AF_FIREPOS);
-		CMD3(CCC_Mask, "g_firepos_zoom", &psActorFlags, AF_FIREPOS_ZOOM);
 		CMD4(CCC_Float, "g_end_modif", &g_end_modif, 0.f, 10.f);
 	}
 #endif // MASTER_GOLD
@@ -2485,6 +2578,39 @@ void CCC_RegisterCommands()
 
 	CMD1(CCC_TimeFactor, "time_factor");
 	CMD1(CCC_FreezeTime, "freeze_time");
+
+	CMD3(CCC_Mask, "g_firepos", &psActorFlags, AF_FIREPOS);
+	CMD3(CCC_Mask, "g_firepos_zoom", &psActorFlags, AF_FIREPOS_ZOOM);
+	CMD3(CCC_Mask, "g_firedir_third_person", &psActorFlags, AF_FIREDIR_THIRD_PERSON);
+	CMD3(CCC_Mask, "g_aimpos", &psActorFlags, AF_AIMPOS);
+	CMD3(CCC_Mask, "g_aimpos_zoom", &psActorFlags, AF_AIMPOS_ZOOM);
+	CMD4(CCC_Integer, "g_nearwall", &g_nearwall, 0, 2);
+	CMD4(CCC_Integer, "g_nearwall_trace", &g_nearwall_trace, 0, 1);
+
+	CMD4(CCC_Integer, "g_auto_reload", &g_auto_reload, 0, 1);
+	CMD4(CCC_Integer, "g_fire_reloads_ubgl", &g_fire_reloads_ubgl, 0, 1);
+	CMD4(CCC_Integer, "g_launcher_dynamic_range", &g_launcher_dynamic_range, 0, 1);
+	CMD4(CCC_Integer, "g_launcher_dynamic_range_zoom", &g_launcher_dynamic_range_zoom, 0, 1);
+	CMD4(CCC_Integer, "g_launcher_dynamic_range_mode", &g_launcher_dynamic_range_mode, 0, 1);
+	CMD4(CCC_Float, "g_launcher_dynamic_range_max", &g_launcher_dynamic_range_max, 0.f, 1000.f);
+
+	CMD3(CCC_Mask, "g_crosshair_show_always", &psCrosshair_Flags, CROSSHAIR_SHOW_ALWAYS);
+	CMD3(CCC_Mask, "g_crosshair_independent", &psCrosshair_Flags, CROSSHAIR_INDEPENDENT);
+	
+	CrosshairCameraNearCommands(g_crosshair_camera_near, "camera_near");
+	CrosshairCameraFarCommands(g_crosshair_camera_far, "camera_far");
+	CrosshairNearCommands(g_crosshair_weapon_near, "weapon_near");
+	CrosshairFarCommands(g_crosshair_weapon_far, "weapon_far");
+	CrosshairNearCommands(g_crosshair_device_near, "device_near");
+	CrosshairFarCommands(g_crosshair_device_far, "device_far");
+
+	CMD4(CCC_Float, "g_recon_show_speed", &recon_show_speed, 0.f, 20.f);
+	CMD4(CCC_Float, "g_recon_hide_speed", &recon_hide_speed, 0.f, 20.f);
+	CMD4(CCC_Float, "g_recon_mindist", &recon_mindist, 0.f, 300.f);
+	CMD4(CCC_Float, "g_recon_maxdist", &recon_mindist, 0.f, 300.f);
+	CMD4(CCC_Float, "g_recon_minspeed", &recon_mindist, .1f, 20.f);
+	CMD4(CCC_Float, "g_recon_maxspeed", &recon_mindist, .1f, 20.f);
+
 	CMD3(CCC_Mask, "g_use_tracers", &psActorFlags, AF_USE_TRACERS);
 	CMD3(CCC_Mask, "g_autopickup", &psActorFlags, AF_AUTOPICKUP);
 	CMD3(CCC_Mask, "g_dynamic_music", &psActorFlags, AF_DYNAMIC_MUSIC);
@@ -2705,6 +2831,8 @@ void CCC_RegisterCommands()
 
 	CMD4(CCC_Integer, "ai_die_in_anomaly", &g_ai_die_in_anomaly, 0, 1); //Alundaio
 
+	CMD4(CCC_Integer, "binoculars_dynamic_zoom_check", &binoculars_dynamic_zoom_check, 0, 1); //VodoXleb
+
 	CMD4(CCC_Integer, "pseudogiant_can_damage_objects_on_stomp", &pseudogiantCanDamageObjects, 0, 1);
 
 	CMD4(CCC_Integer, "telekinetic_objects_include_corpses", &g_telekinetic_objects_include_corpses, 0, 1); // Tosox
@@ -2722,6 +2850,26 @@ void CCC_RegisterCommands()
 	CMD4(CCC_Float, "head_bob_factor", &g_head_bob_factor, 0.f, 2.f);
 
 	CMD3(CCC_Mask, "weapon_sway", &psDeviceFlags2, rsAimSway);
+
+	CMD3(CCC_Mask, "blend_move_anims", &psDeviceFlags2, rsBlendMoveAnims);
+
+	CMD4(CCC_Integer, "mt_update_weapon_sounds", &mt_UpdateWeaponSounds, 0, 1);
+
+	CMD4(CCC_Integer, "spawn_antifreeze", &spawn_antifreeze, 0, 1);
+	CMD4(CCC_Integer, "spawn_antifreeze_debug", &spawn_antifreeze_debug, 0, 1);
+
+	CMD4(CCC_Float, "ik_calc_dist", &IK_CALC_DIST, 50, 150);
+	CMD4(CCC_Float, "ik_calc_ssa", &IK_CALC_SSA, 0.001f, 0.02f);
+	CMD4(CCC_Float, "ik_always_calc_dist", &IK_ALWAYS_CALC_DIST, 10, 50);
+	CMD4(CCC_Integer, "r__optimize_calculate_bones", &r_optimize_calculate_bones, 0, 1);
+
+	CMD4(CCC_Integer, "g_progressive_stamina_cost", &progressiveStaminaCost, 0, 1);
+	CMD4(CCC_Integer, "g_npcs_look_at_actor", &NPCsLookAtActor, 0, 1);
+	CMD4(CCC_Float, "g_npcs_look_at_actor_min_distance", &NPCsLookAtActorMinDistance, 1.f, 8.f);
+	CMD4(CCC_Integer, "g_interrupt_fire_on_aim_toggle", &interruptFireOnAimToggle, 0, 1);
+
+	// demonized: Restores fun physics bugs like lift
+	CMD4(CCC_Integer, "fun_allowed", &fun_allowed, 0, 1);
 
 #ifdef DEBUG
 	//extern BOOL g_use_new_ballistics;
@@ -2786,7 +2934,7 @@ void CCC_RegisterCommands()
 	CMD1(CCC_FPDPositionOffset, "first_person_death_position_offset");
 	CMD4(CCC_Integer, "first_person_death_position_smoothing", &firstPersonDeathPositionSmoothing, 1, 30);
 	CMD4(CCC_Integer, "first_person_death_direction_smoothing", &firstPersonDeathDirectionSmoothing, 1, 60);
-	CMD4(CCC_Float, "first_person_death_near_plane_offset", &viewportNearOffset, -0.1, 0.5);
+	CMD4(CCC_Float, "first_person_death_near_plane_offset", &viewportNearOffset, -.1f, .5f);
 
 	// PDA commands
 	CMD4(CCC_Integer, "pda_map_zoom_in_to_mouse", &pda_map_zoom_in_to_mouse, 0, 1);
@@ -2794,6 +2942,7 @@ void CCC_RegisterCommands()
 
 	// Mouse Wheel
 	CMD4(CCC_Integer, "mouse_wheel_change_weapon", &mouseWheelChangeWeapon, 0, 1);
+	CMD4(CCC_Integer, "mouse_wheel_invert_change_weapon", &mouseWheelInvertChangeWeapons, 0, 1);
 	CMD4(CCC_Integer, "mouse_wheel_invert_zoom", &mouseWheelInvertZoom, 0, 1);
 
 	//Toggle crash saving
@@ -2815,6 +2964,12 @@ void CCC_RegisterCommands()
 
 	// Print warnings when using bone_position and bone_direction functions and encounter invalid bones
 	CMD4(CCC_Integer, "print_bone_warnings", &print_bone_warnings, 0, 1);
+
+	// Print DLTX warnings when "override section which doesn't exist"
+	CMD4(CCC_Integer, "print_dltx_warnings", &print_dltx_warnings, 0, 1);
+
+	// Ignore "no renderer type set for hanging-lamp" error
+	CMD4(CCC_Integer, "hanging_lamp_ignore_match_configuration", &alifeObjectHangingLampIgnoreMatchConfiguration, 0, 1);
 
 	// Poltergeists spawn corpses on death
 	CMD4(CCC_Integer, "poltergeist_spawn_corpse_on_death", &poltergeist_spawn_corpse_on_death, 0, 1);
@@ -2847,7 +3002,11 @@ void CCC_RegisterCommands()
 
 	// Allows freelook during reload animations
 	CMD4(CCC_Integer, "freelook_while_reloading", &g_freelook_while_reloading, 0, 1);
-	// Indoor weapon sounds
-	CMD4(CCC_Float, "g_gunsnd_indoor", &g_gunsnd_indoor, 0.0f, 1.0f);
-	CMD4(CCC_Float, "g_gunsnd_indoor_volume", &g_gunsnd_indoor_volume, 0.0f, 5.0f);
+
+	// Draw pickup item names
+	CMD4(CCC_Integer, "g_draw_pickup_item_names", &drawPickupItemNames, 0, 1);
+
+	// Wallmark distances
+	CMD4(CCC_Float, "g_wallmark_range_static", &wallmark_range_static, 0.f, 1000.f);
+	CMD4(CCC_Float, "g_wallmark_range_skeleton", &wallmark_range_skeleton, 0.f, 1000.f);
 }

@@ -15,6 +15,7 @@
 #include "CameraRecoil.h"
 
 #include "NewZoomFlag.h"
+#include <Layers/xrRender/xrRender_console.h>
 
 class CEntity;
 class ENGINE_API CMotionDef;
@@ -28,7 +29,7 @@ class CNightVisionEffector;
 
 extern float f_weapon_deterioration;
 
-extern std::map<shared_str, float> listScopeRadii;
+extern xr_map<shared_str, float> listScopeRadii;
 
 extern float scope_scrollpower;
 extern float sens_multiple;
@@ -46,9 +47,16 @@ struct SafemodeAnm
 	float power, speed;
 };
 
+struct Lens {
+	Fmatrix transform = Fmatrix().identity();
+	float radius = 0.0;
+};
+
 class CWeapon : public CHudItemObject,
                 public CShootingObject
 {
+	friend class CWeaponGrenadeLauncher;
+	
 private:
 	typedef CHudItemObject inherited;
 
@@ -63,6 +71,7 @@ public:
 	virtual void net_Destroy();
 	virtual void net_Export(NET_Packet& P);
 	virtual void net_Import(NET_Packet& P);
+	virtual void net_Relcase(CObject* object) override;
 
 	virtual CWeapon* cast_weapon()
 	{
@@ -85,8 +94,12 @@ public:
 
 	float CWeapon::GetSecondVPFov() const;
 	IC float GetZRotatingFactor()    const { return m_zoom_params.m_fZoomRotationFactor; }
-	IC float GetSecondVPZoomFactor() const { return m_zoom_params.m_fSecondVPFovFactor; }
-	IC float IsSecondVPZoomPresent() const { return GetSecondVPZoomFactor() > 0.005f; }
+	IC float GetSecondVPZoomFactor() const { return GetZoomFactor(); }
+	float IsSecondVPZoomPresent() { 
+		return scope_svp_enabled
+			&& GetSecondVPZoomFactor() > 0.005f
+			&& GetSVPCameraMatrix(Fmatrix());
+	}
 
 	// Up
 	// Magazine system & etc
@@ -112,6 +125,8 @@ public:
 	virtual void HUD_VisualBulletUpdate(bool force = false, int force_idx = -1);
 
 	void UpdateSecondVP();
+	bool CWeapon::GetSVPCameraMatrix(Fmatrix& camera);
+
 
 	virtual void UpdateCL();
 	virtual void shedule_Update(u32 dt);
@@ -169,6 +184,8 @@ protected:
 	virtual bool IsHudModeNow();
 	virtual bool SOParentIsActor() { return ParentIsActor(); }
 	u8 last_idx;
+
+	CAnonHudItem* m_scopeItem = NULL;
 public:
 	void signal_HideComplete();
 	virtual bool Action(u16 cmd, u32 flags);
@@ -437,7 +454,7 @@ public:
 	virtual u8 GetCurrentHudOffsetIdx();
 
 	// Tronex script exports
-	void AmmoTypeForEach(const luabind::functor<bool>& funct);
+	void AmmoTypeForEach(const ::luabind::functor<bool>& funct);
 	float GetMagazineWeightScript() const { return GetMagazineWeight(m_magazine); }
 	int GetAmmoCount_forType_Script(LPCSTR type) const { return GetAmmoCount_forType(type); }
 	LPCSTR GetGrenadeLauncherNameScript() const { return *GetGrenadeLauncherName(); }
@@ -518,12 +535,8 @@ public:
 
 private:
 	firedeps m_current_firedeps;
-	//collide::rq_results RQS;
-	//PickParam PP;
 
 public:
-	//virtual collide::rq_result& GetRQ() { return PP.RQ; }
-	//virtual void net_Relcase(CObject* object);
 	Fmatrix m_shoot_shake_mat;
 	void UpdateZoomParams();
 
@@ -532,6 +545,20 @@ public:
 	shared_str m_primary_scope_tex_name;
 	shared_str m_secondary_scope_tex_name;
 
+private:
+	float m_nearwall_zoomed_range;
+	bool m_firepos;
+	bool m_aimpos;
+
+public:
+	bool GetFirepos() { return m_firepos; }
+	bool GetAimpos() { return m_aimpos; }
+	float GetTargetNearWallOffset();
+	float GetTargetHudFov();
+
+public:
+	Fmatrix RayTransform();
+
 protected:
 	virtual void UpdateFireDependencies_internal();
 	void UpdateUIScope();
@@ -539,7 +566,6 @@ protected:
 	void ToggleGrenadeLauncher();
     void SetZoomType(u8 new_zoom_type);
 	void SetZoomTypeAndParams(u8 zoomType);
-	float GetHudFov();
 	virtual void UpdatePosition(const Fmatrix& transform); //.
 	virtual void UpdateXForm();
 	void InterpolateOffset(Fvector& current, const Fvector& target, const float factor) const;
@@ -551,6 +577,7 @@ protected:
 	};
 
 	virtual void LoadFireParams(LPCSTR section);
+	void DebugDrawWeapon();
 public:
 	IC const Fvector& get_LastFP()
 	{

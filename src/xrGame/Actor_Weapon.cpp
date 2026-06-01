@@ -1,4 +1,4 @@
-// Actor_Weapon.cpp:	 для работы с оружием
+// Actor_Weapon.cpp:	 РґР»СЏ СЂР°Р±РѕС‚С‹ СЃ РѕСЂСѓР¶РёРµРј
 //////////////////////////////////////////////////////////////////////
 
 #include "stdafx.h"
@@ -29,7 +29,7 @@ static const float VEL_A_MAX = 10.f;
 BOOL g_fix_avelocity_spread = 0;
 BOOL g_apply_pdm_to_ads = 0;
 BOOL g_smooth_ads_transition = 0;
-//возвращает текуший разброс стрельбы (в радианах)с учетом движения
+//РІРѕР·РІСЂР°С‰Р°РµС‚ С‚РµРєСѓС€РёР№ СЂР°Р·Р±СЂРѕСЃ СЃС‚СЂРµР»СЊР±С‹ (РІ СЂР°РґРёР°РЅР°С…)СЃ СѓС‡РµС‚РѕРј РґРІРёР¶РµРЅРёСЏ
 float CActor::GetWeaponAccuracy() const
 {
 	CWeapon* W = smart_cast<CWeapon*>(inventory().ActiveItem());
@@ -100,59 +100,31 @@ float CActor::GetWeaponAccuracy() const
 	return (dispersion * disp_aim);
 }
 
+SPickParam& CActor::GetPick()
+{
+	// Find a HUD item, if one exists
+	if (g_player_hud->attached_item(0))
+		return g_player_hud->attached_item(0)->m_parent_hud_item->GetPick();
+	else if (g_player_hud->attached_item(1))
+		return g_player_hud->attached_item(1)->m_parent_hud_item->GetPick();
+
+	return HUD().GetPick();
+}
 
 void CActor::g_fireParams(const CHudItem* pHudItem, Fvector& fire_pos, Fvector& fire_dir)
 {
-	fire_pos = Cameras().Position();
-	fire_dir = Cameras().Direction();
+	SPickParam& pp = GetPick();
 
-	CWeapon* pWeapon = smart_cast<CWeapon*>(inventory().ActiveItem());
-	const CMissile* pMissile = smart_cast<const CMissile*>(pHudItem);
-	if (pMissile)
-	{
-		Fvector offset;
-		XFORM().transform_dir(offset, pMissile->throw_point_offset());
-		fire_pos.add(offset);
-	}
-	else if (pWeapon && pWeapon->IsAttachedToHUD() && !smart_cast<CWeaponKnife*>(pWeapon))
-	{
-		const Fmatrix& fire_mat = pWeapon->get_ParticlesXFORM();
-		//collide::rq_result& RQ = pWeapon->GetRQ();
-		//float dist = RQ.range / 3.f;
-		if (cam_freelook != eflDisabled)
-		{
-			Fvector dir;
-			float pitch = fire_mat.k.getP();
-			dir.setHP(-angle_normalize_signed(old_torso_yaw), pitch > 0.f ? ((pWeapon->GetState() == CWeapon::eFire || cam_freelook == eflDisabling) ? pitch : pitch * .6f) : pitch * .8f);
-			fire_dir = dir;
-		}
-		else if ((psActorFlags.test(AF_FIREPOS) || mstate_real & mcAnyMove) && (psActorFlags.test(AF_FIREPOS_ZOOM) || pWeapon->GetZRotatingFactor() != 1.f /*|| dist < 1.f*/))
-		{
-			//correct barrel direction
-			fire_dir = fire_mat.k; //pWeapon->get_lastFD() doesn't seem to work, returns (0,0,1) for all weapons except pistols/shotguns
+	attachable_hud_item* item_0 = g_player_hud->attached_item(0);
+	attachable_hud_item* item_1 = g_player_hud->attached_item(1);
 
-			/* disabled for now, bugs :(
-			//correct barrel position
-			Fvector pos = pWeapon->get_LastFP();
-			Fvector offs;
-			float zoff = pWeapon->HudItemData()->m_item_transform.c.z;
-			zoff -= pos.z;
-			fire_mat.transform_tiny(offs, { 0, 0, -.5f }); //otherwise you can shoot through thin walls
-			pos.add(offs);
-			fire_pos = pos;
-			const Fmatrix& fire_mat2 = pWeapon->HudItemData()->m_model->LL_GetTransform(pWeapon->HudItemData()->m_measures.m_fire_bone);
-			Fvector offs = g_player_hud->m_adjust_mode ? g_player_hud->m_adjust_firepoint_shell[0][0] : pWeapon->HudItemData()->m_measures.m_fire_point_offset;
-			offs.z -= 1.f;
-			fire_mat2.transform_tiny(fire_pos, offs);
-			pWeapon->HudItemData()->m_item_transform.transform_tiny(fire_pos);
+	if (item_0)
+		item_0->m_parent_hud_item->g_fireParams(pp);
+	else if (item_1)
+		item_1->m_parent_hud_item->g_fireParams(pp);
 
-			//fire_pos = pWeapon->get_LastFP();
-
-			//use barrel position instead of camera position even for zoomed weapon if close to a wall
-			if (pWeapon->IsZoomed())
-				fire_pos.lerp(fire_pos, Cameras().Position(), dist);*/
-		}
-	}
+	fire_pos = pp.defs.start;
+	fire_dir = pp.defs.dir;
 }
 
 void CActor::g_WeaponBones(int& L, int& R1, int& R2)
@@ -396,9 +368,9 @@ void CActor::RemoveAmmoForWeapon(CInventoryItem* pIItem)
 
 	CWeaponAmmo* pAmmo = smart_cast<CWeaponAmmo*>(inventory().GetAny(pWM->m_ammoTypes[0].c_str()));
 	if (!pAmmo) return;
-	//--- мы нашли патроны к текущему оружию	
+	//--- РјС‹ РЅР°С€Р»Рё РїР°С‚СЂРѕРЅС‹ Рє С‚РµРєСѓС‰РµРјСѓ РѕСЂСѓР¶РёСЋ	
 	/*
-	//--- проверяем не подходят ли они к чему-то еще
+	//--- РїСЂРѕРІРµСЂСЏРµРј РЅРµ РїРѕРґС…РѕРґСЏС‚ Р»Рё РѕРЅРё Рє С‡РµРјСѓ-С‚Рѕ РµС‰Рµ
 	bool CanRemove = true;
 	TIItemContainer::const_iterator I = inventory().m_all.begin();//, B = I;
 	TIItemContainer::const_iterator E = inventory().m_all.end();
@@ -420,3 +392,15 @@ void CActor::RemoveAmmoForWeapon(CInventoryItem* pIItem)
 	//	u_EventGen			(P,GE_DESTROY,pAmmo->ID());
 	//	u_EventSend			(P);
 };
+
+#ifdef STATIONARYMGUN_NEW
+float CActor::GetWeaponAccuracyStm()
+{
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(Holder());
+	if (stm && stm->IsCameraZoom())
+	{
+		return m_fDispAim;
+	}
+	return m_fDispBase;
+}
+#endif

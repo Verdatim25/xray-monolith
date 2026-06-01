@@ -51,7 +51,9 @@ extern float scope_radius;
 Flags32 zoomFlags = {};
 extern float n_zoom_step_count;
 float sens_multiple = 1.0f;
+float hud_fov_aim_multiplier = 1.0f;
 
+extern int g_nearwall;
 
 float CWeapon::SDS_Radius(bool alt) {
 	// hack for GL to always return 0, fix later
@@ -151,9 +153,6 @@ CWeapon::CWeapon()
 	m_bCanBeLowered = false;
 	m_fSafeModeRotateTime = 0.f;
 	bClearJamOnly = false;
-
-	//PP.RQ.range = 0.f;
-	//PP.RQ.set(NULL, 0.f, -1);
 
 	bHasBulletsToHide = false;
 	bullet_cnt = 0;
@@ -337,6 +336,7 @@ void CWeapon::UpdateZoomParams() {
 			m_zoom_params.m_fScopeZoomFactor = pSettings->r_float(GetScopeName(), "scope_zoom_factor") / zoom_multiple;
 			if (m_modular_attachments) {
 				m_zoom_params.m_bUseDynamicZoom = READ_IF_EXISTS(pSettings, r_bool, GetScopeName(), "scope_dynamic_zoom", false);
+				m_zoom_params.m_fMinBaseZoomFactor = READ_IF_EXISTS(pSettings, r_float, GetScopeName(), "min_scope_zoom_factor", 200.0f);
 				stepCount = READ_IF_EXISTS(pSettings, r_float, GetScopeName(), "zoom_step_count", 0);
 			}
 		} else
@@ -497,26 +497,36 @@ void CWeapon::SetZoomType(u8 new_zoom_type)
     int previous_zoom_type = m_zoomtype;
     m_zoomtype = new_zoom_type;
 
-    luabind::functor<void> funct;
+    ::luabind::functor<void> funct;
     if (ai().script_engine().functor("_G.CWeapon_OnSwitchZoomType", funct))
     {
         funct(this->lua_game_object(), previous_zoom_type, m_zoomtype);
     }
+
+	UpdateSecondVP();
 }
 
 extern float g_ironsights_factor;
 
-inline float smoothstep(float x)
+// new easing for hud_fov_aim_factor
+inline float easeInQuart(float x)
 {
-	return x * x * (3 - 2 * x);
+	return x * x * x * x;
 }
 
-float CWeapon::GetHudFov()
+// new easing for hud_fov_aim_factor
+inline float easeOutQuart(float x)
 {
-	float base = inherited::GetHudFov();
+	return 1 - pow(1 - x, 4);
+}
 
-	float x = smoothstep(m_zoom_params.m_fZoomRotationFactor);
-	float factor = hud_fov_aim_factor > 0 ? hud_fov_aim_factor : 1;
+float CWeapon::GetTargetHudFov()
+{
+	float base = inherited::GetTargetHudFov();
+
+	// check aim state to determine easing
+	float x = IsZoomed() ? easeOutQuart(m_zoom_params.m_fZoomRotationFactor) : easeInQuart(m_zoom_params.m_fZoomRotationFactor);
+	float factor = hud_fov_aim_factor > 0 ? hud_fov_aim_factor * hud_fov_aim_multiplier : 1; // ltx hud_fov_aim_factor
 	base = (base * factor) * x + base * (1 - x);
 
 	/*
@@ -528,6 +538,19 @@ float CWeapon::GetHudFov()
 	*/
 
 	return base;
+}
+
+static float lerp(float a, float b, float t)
+{
+	return a * (1 - t) + b * t;
+}
+
+float CWeapon::GetTargetNearWallOffset()
+{
+	float ofs = inherited::GetTargetNearWallOffset();
+	float ofs_ads = ofs;
+	clamp(ofs_ads, ofs_ads, m_nearwall_zoomed_range);
+	return lerp(ofs, ofs_ads, GetZRotatingFactor());
 }
 
 void CWeapon::ForceUpdateFireParticles()
@@ -858,6 +881,7 @@ void CWeapon::Load(LPCSTR section)
 	m_bCanBeLowered = READ_IF_EXISTS(pSettings, r_bool, section, "can_be_lowered", false);
 
 	m_fSafeModeRotateTime = READ_IF_EXISTS(pSettings, r_float, section, "weapon_lower_speed", 1.f);
+	hud_fov_aim_multiplier = READ_IF_EXISTS(pSettings, r_float, section, "hud_fov_aim_factor", 1.f);
 
 	UpdateUIScope();
 
@@ -884,6 +908,11 @@ void CWeapon::Load(LPCSTR section)
 		}
 	}
 	//--DSR-- SilencerOverheat_end
+
+	m_nearwall_zoomed_range = READ_IF_EXISTS(pSettings, r_float, section, "nearwall_zoomed_range", 0.04f);
+
+	m_firepos = READ_IF_EXISTS(pSettings, r_bool, section, "firepos", true);
+	m_aimpos = READ_IF_EXISTS(pSettings, r_bool, section, "aimpos", true);
 }
 
 // demonized: World model on stalkers adjustments
@@ -924,7 +953,7 @@ void CWeapon::LoadFireParams(LPCSTR section)
 	CShootingObject::LoadFireParams(section);
 };
 
-void GetZoomData(const float scope_factor, const float zoom_step_count, float& delta, float& min_zoom_factor);
+void GetZoomData(const float scope_factor, const float zoom_step_count, const float min_zoom_setting, float& delta, float& min_zoom_factor);
 void newGetZoomDelta(const float scope_factor, float& delta, const float min_zoom_factor, float steps);
 extern BOOL useNewZoomDeltaAlgorithm;
 
@@ -959,7 +988,7 @@ BOOL CWeapon::net_Spawn(CSE_Abstract* DC)
 		if (zoomFlags.test(NEW_ZOOM)) {
 			NewGetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, GetZoomFactor() * power, m_zoom_params.m_fMinBaseZoomFactor);
 		} else {
-			GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+			GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 		}
 		m_fRTZoomFactor = min_zoom_factor;
 	}
@@ -972,6 +1001,19 @@ BOOL CWeapon::net_Spawn(CSE_Abstract* DC)
 	
 	iAmmoElapsed = E->a_elapsed;
 	m_flagsAddOnState = E->m_addon_flags.get();
+	
+	if (m_modular_attachments && m_cur_scope == 0 && (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonScope) != 0 && m_scopes.size() > 1)
+	{
+		m_cur_scope = ::Random.randI(1, m_scopes.size());
+		CWeaponMagazined* wm = smart_cast<CWeaponMagazined*>(this);
+		if (wm)
+		{
+			wm->LoadScopeKoeffs();
+			m_scopeItem = xr_new<CAnonHudItem>();
+			m_scopeItem->Load(m_scopes[m_cur_scope].c_str());
+		}
+	}
+
 	m_ammoType = E->ammo_type;
 	SetState(E->wpn_state);
 	SetNextState(E->wpn_state);
@@ -1259,6 +1301,9 @@ bool CWeapon::NeedBlendAnm()
 	if (IsZoomed() && psDeviceFlags2.test(rsAimSway))
 		return true;
 
+	if (psDeviceFlags2.test(rsBlendMoveAnims))
+		return true;
+	
 	return inherited::NeedBlendAnm();
 }
 
@@ -1351,7 +1396,10 @@ void CWeapon::EnableActorNVisnAfterZoom()
 
 bool CWeapon::need_renderable()
 {
-	return !Device.m_SecondViewport.IsSVPFrame() && !(IsZoomed() && ZoomTexture() && !IsRotatingToZoom());
+	bool svp_has_objective_lens = (scope_svp_enabled >= 2 && Device.m_SecondViewport.objective.radius > EPS);
+	bool not_in_scope = !Device.m_SecondViewport.IsSVPFrame() && !(IsZoomed() && ZoomTexture() && !IsRotatingToZoom());
+
+	return svp_has_objective_lens || not_in_scope;
 }
 
 void CWeapon::renderable_Render()
@@ -1397,6 +1445,7 @@ void CWeapon::UpdatePosition(const Fmatrix& trans)
 	VERIFY(!fis_zero(DET(renderable.xform)));
 }
 
+BOOL interruptFireOnAimToggle = FALSE;
 bool CWeapon::Action(u16 cmd, u32 flags)
 {
 	if (inherited::Action(cmd, flags)) return true;
@@ -1452,7 +1501,7 @@ bool CWeapon::Action(u16 cmd, u32 flags)
 
 							if (GetState() != eAimStart && HudAnimationExist("anm_idle_aim_start"))
 								SwitchState(eAimStart);
-							else if (GetState() != eIdle)
+							else if (interruptFireOnAimToggle && GetState() != eIdle)
 								SwitchState(eIdle);
 
 							OnZoomIn();
@@ -1478,7 +1527,7 @@ bool CWeapon::Action(u16 cmd, u32 flags)
 
 						if (GetState() != eAimStart && HudAnimationExist("anm_idle_aim_start"))
 							SwitchState(eAimStart);
-						else if (GetState() != eIdle)
+						else if (interruptFireOnAimToggle && GetState() != eIdle)
 							SwitchState(eIdle);
 
 						OnZoomIn();
@@ -2005,7 +2054,7 @@ void CWeapon::OnZoomIn()
 			if (zoomFlags.test(NEW_ZOOM)) {
 				NewGetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, GetZoomFactor() * power, m_zoom_params.m_fMinBaseZoomFactor);
 			} else {
-				GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+				GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 			}
 			
 			m_fRTZoomFactor = min_zoom_factor;
@@ -2042,6 +2091,8 @@ void CWeapon::OnZoomIn()
 	}
 
 	g_player_hud->updateMovementLayerState();
+
+	UpdateSecondVP();
 }
 
 void CWeapon::OnZoomOut()
@@ -2329,42 +2380,6 @@ bool CWeapon::ready_to_kill() const
 	);
 }
 
-ICF static BOOL pick_trace_callback(collide::rq_result& result, LPVOID params)
-{
-	PickParam* pp = (PickParam*)params;
-	++pp->pass;
-
-	if (result.O)
-	{
-		pp->RQ = result;
-		return FALSE;
-	}
-	else
-	{
-		CDB::TRI* T = Level().ObjectSpace.GetStaticTris() + result.element;
-
-		SGameMtl* mtl = GMLib.GetMaterialByIdx(T->material);
-		pp->power *= mtl->fVisTransparencyFactor;
-		if (pp->power > 0.34f)
-		{
-			return TRUE;
-		}
-	}
-	pp->RQ = result;
-	return FALSE;
-}
-
-/*void CWeapon::net_Relcase(CObject* object)
-{
-	if (!ParentIsActor())
-		return;
-
-	if (PP.RQ.O == object)
-		PP.RQ.O = NULL;
-
-	RQS.r_clear();
-}*/
-
 void CWeapon::InterpolateOffset(Fvector& current, const Fvector& target, const float factor) const
 {
 	if (target.similar(current, EPS))
@@ -2394,31 +2409,6 @@ void CWeapon::UpdateHudAdditional(Fmatrix& trans)
 	attachable_hud_item* hi = HudItemData();
 	attachable_hud_item* si = g_player_hud->attached_item(SCOPE_ATTACH_IDX);
 	R_ASSERT(hi);
-
-	/*PP.RQ.O = 0;
-	PP.RQ.range = 3.f;
-	PP.RQ.element = -1;
-	PP.power = 1.0f;
-	PP.pass = 0;
-	RQS.r_clear();
-
-	const Fmatrix& fire_mat = HudItemData()->m_model->LL_GetTransform(HudItemData()->m_measures.m_fire_bone);
-	Fvector pos; // = get_LastFP();
-	Fvector offs = g_player_hud->m_adjust_mode ? g_player_hud->m_adjust_firepoint_shell[0][0] : HudItemData()->m_measures.m_fire_point_offset;
-	offs.z -= g_freelook_z_offset;
-	fire_mat.transform_tiny(pos, offs);
-	HudItemData()->m_item_transform.transform_tiny(pos);
-	Fvector offs;
-	fire_mat.transform_tiny(offs, { 0, 0, -pos.z -.5f }); //otherwise you can shoot through thin walls
-	pos.add(offs);
-	
-	// add RQ for weapon barrel collision
-	collide::ray_defs RD(pos, get_ParticlesXFORM().k, 3.f, CDB::OPT_CULL, collide::rqtBoth);
-	if (Level().ObjectSpace.RayQuery(RQS, RD, pick_trace_callback, &PP, NULL, Level().CurrentEntity()))
-		clamp(PP.RQ.range, 0.f, 3.f);
-
-	//Msg("RQ range: %f", PP.RQ.range);
-	*/
 
 	u8 idx = GetCurrentHudOffsetIdx();
 
@@ -3011,7 +3001,7 @@ float CWeapon::GetMagazineWeight(const decltype(CWeapon::m_magazine)& mag) const
 	return res;
 }
 
-void CWeapon::AmmoTypeForEach(const luabind::functor<bool> &funct)
+void CWeapon::AmmoTypeForEach(const ::luabind::functor<bool> &funct)
 {
 	for (u8 i = 0; i < u8(m_ammoTypes.size()); ++i)
 	{
@@ -3043,6 +3033,9 @@ float CWeapon::Weight() const
 
 bool CWeapon::show_crosshair()
 {
+	if (psCrosshair_Flags.is(CROSSHAIR_SHOW_ALWAYS))
+		return true;
+
 	return !IsPending() && (!IsZoomed() || !ZoomHideCrosshair());
 }
 
@@ -3148,12 +3141,12 @@ void CWeapon::render_hud_mode()
 
 bool CWeapon::MovingAnimAllowedNow()
 {
-	return !IsZoomed();
+	return !IsZoomed() && !psDeviceFlags2.test(rsBlendMoveAnims);
 }
 
 bool CWeapon::IsHudModeNow()
 {
-	return (IsAttachedToHUD() != NULL);
+	return GetHUDmode();
 }
 
 float CWeapon::GetMinScopeZoomFactor() const
@@ -3164,7 +3157,7 @@ float CWeapon::GetMinScopeZoomFactor() const
 		NewGetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, GetZoomFactor() * power, m_zoom_params.m_fMinBaseZoomFactor);
 	}
 	else {
-		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 	}
 	return min_zoom_factor;
 }
@@ -3179,7 +3172,7 @@ void CWeapon::ZoomInc()
 	if (zoomFlags.test(NEW_ZOOM)) {
 		NewGetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, GetZoomFactor() * power, m_zoom_params.m_fMinBaseZoomFactor);
 	} else {
-		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 	}
 
 	float f = GetZoomFactor() * power - delta;
@@ -3202,16 +3195,16 @@ void CWeapon::ZoomDec()
 	if (zoomFlags.test(NEW_ZOOM)) {
 		NewGetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, GetZoomFactor() * power, m_zoom_params.m_fMinBaseZoomFactor);
 	} else {
-		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+		GetZoomData(m_zoom_params.m_fScopeZoomFactor * power, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 	}
 
 	float f = GetZoomFactor() * power + delta;
 	if (useNewZoomDeltaAlgorithm)
-		f = GetZoomFactor() * power / max(delta, 0.001f);
+		f = GetZoomFactor() * power / std::max(delta, 0.001f);
 
 	clamp(f, m_zoom_params.m_fScopeZoomFactor * power, min_zoom_factor);
 	SetZoomFactor(f / power);
-	
+
 	m_fRTZoomFactor = GetZoomFactor() * power;
 }
 
@@ -3241,19 +3234,101 @@ u32 CWeapon::Cost() const
 	return res;
 }
 
-float CWeapon::GetSecondVPFov() const
-{
-	if (m_zoom_params.m_bUseDynamicZoom && IsSecondVPZoomPresent())
-		return (m_fRTZoomFactor / 100.f) * g_fov;
-
-	return GetSecondVPZoomFactor() * g_fov;
-}
-
 void CWeapon::UpdateSecondVP()
 {
 	if (!(ParentIsActor() && (m_pInventory != NULL) && (m_pInventory->ActiveItem() == this)))
 		return;
 
 	CActor* pActor = smart_cast<CActor*>(H_Parent());
-	Device.m_SecondViewport.SetSVPActive(m_zoomtype == 0 && pActor->cam_Active() == pActor->cam_FirstEye() && IsSecondVPZoomPresent() && m_zoom_params.m_fZoomRotationFactor > 0.05f);
+	Device.m_SecondViewport.SetSVPActive((scope_debug && scope_svp_enabled && IsSecondVPZoomPresent())
+		|| (m_zoomtype == 0 && pActor->cam_Active() == pActor->cam_FirstEye() && IsSecondVPZoomPresent() && IsZoomed()));
+}
+
+bool CWeapon::GetSVPCameraMatrix(Fmatrix& camera)
+{
+	if (Device.m_SecondViewport.eyepiece.radius > EPS) {
+		// Many guns have had their mesh directly scaled, so the only reliable unit of
+		//    measurement is based off the only reliable mesh in the file. The lens.
+		Fvector4 o = Fvector4(scope_objective_lens_offset).mul(Device.m_SecondViewport.eyepiece.radius);
+
+		if (Device.m_SecondViewport.objective.radius < EPS) {
+			// Can't render weapon in scope, but we can place the camera on the eyepiece lens
+			camera.set(Device.m_SecondViewport.eyepiece.m_W);
+			return true;
+		}
+
+		// Move camera to where min magnification uses full objective lens
+		auto l = o.w / tan(deg2rad(GetMinScopeZoomFactor() * 0.75) / 2.0);
+		o.z -= l;
+
+		
+		
+		camera.mul(Device.m_SecondViewport.eyepiece.m_W, Fmatrix().translate({ o.x, o.y, o.z }));
+		return true;
+	}
+
+	return false;
+}
+
+Fmatrix CWeapon::RayTransform()
+{
+	attachable_hud_item* hi = HudItemData();
+	hud_item_measures& measures = hi->m_measures;
+
+	Fmatrix matrix;
+
+	if (GetHUDmode())
+	{
+		// If we're in first-person, use the HUD item transform
+		matrix = hi->m_item_transform;
+		matrix.mulB_43(hi->m_model->LL_GetTransform(measures.m_fire_bone));
+		matrix.mulB_43(Fmatrix().translate(measures.m_fire_point_offset));
+	}
+	else
+	{
+		// If we're in third-person, use the world item transform
+		matrix = XFORM();
+
+		if (psActorFlags.test(AF_FIREDIR_THIRD_PERSON))
+		{
+			// If firedir is enabled, override the barrel orientation with the HUD equivalent
+			Fmatrix hud_rot = hi->m_item_transform;
+
+			float h, p, b;
+			hud_rot.getHPB(h, p, b);
+
+			float _h, _p;
+			matrix.getHPB(_h, _p, b);
+
+			Fvector pos = matrix.c;
+			matrix.setHPB(h, p, b);
+			matrix.c = pos;
+		}
+		else {
+			// Otherwise, transform it by the hands' HUD orientation
+			// to account for Lua-side free aim hackery
+			Fmatrix hud_rot = hi->m_parent->m_transform;
+			hud_rot.mulA_43(Device.mView);
+			hud_rot.c = Fvector();
+			matrix.mulB_43(hud_rot);
+		}
+
+		// Offset by the world-space fire point
+		matrix.mulB_43(Fmatrix().translate(vLoadedFirePoint));
+	}
+
+	ApplyAimModifiers(matrix);
+
+	return matrix;
+}
+
+// v2v3v4: fix ctd when zooming into about to be destroyed object with detector scopes
+void CWeapon::net_Relcase(CObject* object)
+{
+	CHudItem::net_Relcase(object);
+
+	if (!m_zoom_params.m_pVision)
+		return;
+
+	m_zoom_params.m_pVision->remove_links(object);
 }

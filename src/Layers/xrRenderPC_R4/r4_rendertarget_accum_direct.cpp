@@ -742,7 +742,7 @@ void CRenderTarget::accum_direct_blend()
 	{
 		VERIFY(0);
 		if (! RImplementation.o.dx10_msaa)
-			u_setrt(rt_Accumulator,NULL,NULL, HW.pBaseZB);
+			u_setrt(rt_Accumulator,NULL,NULL, baseZB);
 		else
 			u_setrt(rt_Accumulator,NULL,NULL, rt_MSAADepth->pZRT);
 
@@ -750,8 +750,8 @@ void CRenderTarget::accum_direct_blend()
 		// Common calc for quad-rendering
 		u32 Offset;
 		u32 C = color_rgba(255, 255, 255, 255);
-		float _w = float(Device.dwWidth);
-		float _h = float(Device.dwHeight);
+		float _w = float(Width);
+		float _h = float(Height);
 		
 		Fvector2 p0, p1;
 		p0.set(0.0f, 0.0f);
@@ -823,7 +823,7 @@ void CRenderTarget::accum_direct_f(u32 sub_phase)
 	}
 	phase_accumulator();
 	if (! RImplementation.o.dx10_msaa)
-		u_setrt(rt_Generic_0,NULL,NULL, HW.pBaseZB);
+		u_setrt(rt_Generic_0,NULL,NULL, baseZB);
 	else
 		u_setrt(rt_Generic_0_r,NULL,NULL, RImplementation.Target->rt_MSAADepth->pZRT);
 
@@ -932,7 +932,7 @@ void CRenderTarget::accum_direct_f(u32 sub_phase)
 	// Perform lighting
 	{
 		if (! RImplementation.o.dx10_msaa)
-			u_setrt(rt_Generic_0,NULL,NULL, HW.pBaseZB); // enshure RT setup
+			u_setrt(rt_Generic_0,NULL,NULL, baseZB); // enshure RT setup
 		else
 			u_setrt(rt_Generic_0_r,NULL,NULL, RImplementation.Target->rt_MSAADepth->pZRT); // enshure RT setup
 		RCache.set_CullMode(CULL_NONE);
@@ -1205,11 +1205,12 @@ void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, con
 
 	if ((sub_phase != SE_SUN_NEAR) && (sub_phase != SE_SUN_FAR)) return;
 
-	float w = float(Device.dwWidth);
+// SSS : Deprecated
+/*	float w = float(Device.dwWidth);
 	float h = float(Device.dwHeight);
 
-	if (RImplementation.o.ssfx_volumetric)
-		set_viewport_size(HW.pContext, w / ps_ssfx_volumetric.w, h / ps_ssfx_volumetric.w);
+	if (RImplementation.o.ssfx_volumetric) 
+		set_viewport_size(HW.pContext, w / ps_ssfx_volumetric.w, h / ps_ssfx_volumetric.w);*/
 
 	phase_vol_accumulator();
 
@@ -1222,36 +1223,6 @@ void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, con
 		Element = s_accum_direct_volumetric_minmax->E[0];
 
 	//	Assume everything was recalculated before this call by accum_direct
-
-	//	Set correct depth surface
-	//	It's slow. Make this when shader is created
-	{
-		char* pszSMapName;
-		BOOL b_HW_smap = RImplementation.o.HW_smap;
-		BOOL b_HW_PCF = RImplementation.o.HW_smap_PCF;
-		if (b_HW_smap)
-		{
-			if (b_HW_PCF) pszSMapName = r2_RT_smap_depth;
-			else pszSMapName = r2_RT_smap_depth;
-		}
-		else pszSMapName = r2_RT_smap_surf;
-		//s_smap
-		STextureList* _T = &*Element->passes[0]->T;
-
-		STextureList::iterator _it = _T->begin();
-		STextureList::iterator _end = _T->end();
-		for (; _it != _end; _it++)
-		{
-			std::pair<u32, ref_texture>& loader = *_it;
-			u32 load_id = loader.first;
-			//	Shadowmap texture always uses 0 texture unit
-			if (load_id == 0)
-			{
-				//	Assign correct texture
-				loader.second.create(pszSMapName);
-			}
-		}
-	}
 
 	// Perform lighting
 	{
@@ -1382,7 +1353,8 @@ void CRenderTarget::accum_direct_volumetric(u32 sub_phase, const u32 Offset, con
 		// disable depth bounds
 		//		u_DBT_disable	();
 
-		if (RImplementation.o.ssfx_volumetric)
-			set_viewport_size(HW.pContext, w, h);
+// SSS : Deprecated
+//		if (RImplementation.o.ssfx_volumetric)
+//			set_viewport_size(HW.pContext, w, h);
 	}
 }

@@ -50,6 +50,42 @@ IC void R_xforms::set_c_wvp(R_constant* C)
 	RCache.set_c(C, m_wvp);
 };
 
+IC void R_xforms::set_c_w_prev(R_constant* C) 
+{ 
+	c_w_prev[Device.m_SecondViewport.IsSVPFrame()] = C;
+	RCache.set_c(C, m_w_prev[Device.m_SecondViewport.IsSVPFrame()]);
+};
+
+IC void R_xforms::set_c_v_prev(R_constant* C) 
+{ 
+	c_v_prev[Device.m_SecondViewport.IsSVPFrame()] = C; 
+	RCache.set_c(C, m_v_prev[Device.m_SecondViewport.IsSVPFrame()]); 
+};
+
+IC void R_xforms::set_c_p_prev(R_constant* C) 
+{ 
+	c_p_prev[Device.m_SecondViewport.IsSVPFrame()] = C; 
+	RCache.set_c(C, m_p_prev[Device.m_SecondViewport.IsSVPFrame()]); 
+};
+
+IC void R_xforms::set_c_wv_prev(R_constant* C) 
+{ 
+	c_wv_prev[Device.m_SecondViewport.IsSVPFrame()] = C; 
+	RCache.set_c(C, m_wv_prev[Device.m_SecondViewport.IsSVPFrame()]); 
+};
+
+IC void R_xforms::set_c_vp_prev(R_constant* C) 
+{ 
+	c_vp_prev[Device.m_SecondViewport.IsSVPFrame()] = C; 
+	RCache.set_c(C, m_vp_prev[Device.m_SecondViewport.IsSVPFrame()]); 
+};
+
+IC void R_xforms::set_c_wvp_prev(R_constant* C) 
+{ 
+	c_wvp_prev[Device.m_SecondViewport.IsSVPFrame()] = C; 
+	RCache.set_c(C, m_wvp_prev[Device.m_SecondViewport.IsSVPFrame()]); 
+};
+
 IC void CBackend::set_xform_world(const Fmatrix& M)
 {
 	xforms.set_W(M);
@@ -63,6 +99,21 @@ IC void CBackend::set_xform_view(const Fmatrix& M)
 IC void CBackend::set_xform_project(const Fmatrix& M)
 {
 	xforms.set_P(M);
+}
+
+IC void CBackend::set_xform_world_prev(const Fmatrix& M)
+{
+	xforms.set_W_prev(M);
+}
+
+IC void CBackend::set_xform_view_prev(const Fmatrix& M)
+{
+	xforms.set_V_prev(M);
+}
+
+IC void CBackend::set_xform_project_prev(const Fmatrix& M)
+{
+	xforms.set_P_prev(M);
 }
 
 IC const Fmatrix& CBackend::get_xform_world() { return xforms.get_W(); }
@@ -135,6 +186,9 @@ IC void CBackend::set_Element(ShaderElement* S, u32 pass)
 #endif
 #endif	//	USE_DX10
 	set_Constants(P.constants);
+#if USE_DX11
+	RCache.set_c("svp_frame", Device.m_SecondViewport.IsSVPFrame());
+#endif
 	set_Textures(P.T);
 #ifdef _EDITOR
 	set_Matrices	(P.M);

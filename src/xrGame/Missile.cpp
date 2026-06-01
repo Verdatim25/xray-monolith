@@ -30,8 +30,15 @@
 
 CUIProgressShape* g_MissileForceShape = NULL;
 
+#ifdef SPAWN_ANTIFREEZE
+xrCriticalSection force_progress_cs;
+#endif
 void create_force_progress()
 {
+#ifdef SPAWN_ANTIFREEZE
+	xrCriticalSectionGuard g(force_progress_cs);
+#endif
+
 	VERIFY(!g_MissileForceShape);
 	CUIXml uiXml;
 	uiXml.Load(CONFIG_PATH, UI_PATH, "grenade.xml");
@@ -264,14 +271,9 @@ void CMissile::UpdateCL()
 	Fvector P;
 	Center(P);
 
-	if (m_sounds.FindSoundItem("sndShow", false))
-		m_sounds.SetPosition("sndShow", P);
-	if (m_sounds.FindSoundItem("sndHide", false))
-		m_sounds.SetPosition("sndHide", P);
+	m_sounds.UpdateAllSoundsPositions(P);
 	if (m_sounds.FindSoundItem("sndThrow", false) && m_fake_missile)
 		m_sounds.SetPosition("sndThrow", m_fake_missile->Position());
-	if (m_sounds.FindSoundItem("sndCheckout", false))
-		m_sounds.SetPosition("sndCheckout", P);
 }
 
 void CMissile::shedule_Update(u32 dt)
@@ -755,7 +757,7 @@ void CMissile::activate_physic_shell()
 
 void CMissile::net_Relcase(CObject* O)
 {
-	inherited::net_Relcase(O);
+	CHudItem::net_Relcase(O);
 	if (PPhysicsShell() && PPhysicsShell()->isActive())
 	{
 		if (O == smart_cast<CObject*>((CPhysicsShellHolder*)PPhysicsShell()->get_CallbackData()))
@@ -831,4 +833,50 @@ bool CMissile::GetBriefInfo(II_BriefInfo& info)
 	info.clear();
 	info.name._set(m_nameShort);
 	return true;
+}
+
+Fmatrix CMissile::RayTransform()
+{
+	Fmatrix matrix = Device.mInvView;
+	matrix.mulB_43(Fmatrix().translate(m_vThrowPoint));
+	float h, p;
+	m_vThrowDir.getHP(h, p);
+	matrix.mulB_43(Fmatrix().setHPB(h, p, 0));
+	return matrix;
+}
+
+void CMissile::g_fireParams(SPickParam& pp)
+{
+	Fmatrix matrix = RayTransform();
+	Device.hud_to_world(matrix);
+	pp.defs.start = matrix.c;
+	pp.defs.dir = matrix.k;
+}
+#include "pch_script.h"
+
+using namespace luabind;
+
+#pragma optimize("s",on)
+void CMissile::script_register(lua_State *L)
+{
+	module(L)
+	[
+		class_<CMissile, CGameObject>("CMissile")
+		.enum_("EMissileStates")
+		[
+			value("eThrowStart", int(CMissile::eThrowStart)),
+			value("eReady", int(CMissile::eReady)),
+			value("eThrow", int(CMissile::eThrow)),
+			value("eThrowEnd", int(CMissile::eThrowEnd))
+		]
+		.def("GetMinForce", &CMissile::GetMinForce)
+		.def("GetMaxForce", &CMissile::GetMaxForce)
+		.def("GetThrowForce", &CMissile::GetThrowForce)
+		.def("GetConstForce", &CMissile::GetConstForce)
+		.def("IsConstPower", &CMissile::IsConstPower)
+		.def("GetThrowPoint", &CMissile::GetThrowPoint)
+		.def("GetThrowDir", &CMissile::GetThrowDir)
+
+		.def(constructor<>())
+	];
 }

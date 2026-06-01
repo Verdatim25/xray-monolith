@@ -483,6 +483,14 @@ void CScriptGameObject::SetMovementSpeed(Fvector vel)
 
 CHolderCustom* CScriptGameObject::get_current_holder()
 {
+#ifdef HOLDERCUSTOM_NEW
+	CAI_Stalker *stalker = smart_cast<CAI_Stalker *>(&object());
+	if (stalker)
+	{
+		return stalker->Holder();
+	}
+#endif
+
 	CActor* actor = smart_cast<CActor*>(&object());
 
 	if (actor)
@@ -575,6 +583,19 @@ CCar* CScriptGameObject::get_car()
 	}
 	return car;
 }
+
+#ifdef STATIONARYMGUN_NEW
+CWeaponStatMgun *CScriptGameObject::get_stmgun()
+{
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (!stm)
+	{
+		ai().script_engine().script_log(ScriptStorage::eLuaMessageTypeError, "CGameObject : cannot access class member get_stmgun!");
+		NODEFAULT;
+	}
+	return stm;
+}
+#endif
 
 #ifdef DEBUG
 void CScriptGameObject::debug_planner				(const script_planner *planner)
@@ -728,9 +749,9 @@ CScriptGameObject* CScriptGameObject::get_talking_npc() {
 }
 
 // demonized: get scope UI
-luabind::object CScriptGameObject::get_scope_ui() {
+::luabind::object CScriptGameObject::get_scope_ui() {
 	CWeapon* weapon = smart_cast<CWeapon*>(&object());
-	luabind::object table = luabind::newtable(ai().script_engine().lua());
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 	if (!weapon)
 	{
 		ai().script_engine().script_log(ScriptStorage::eLuaMessageTypeError,
@@ -745,7 +766,7 @@ luabind::object CScriptGameObject::get_scope_ui() {
 		return table;
 	}
 
-	luabind::object staticChildren = luabind::newtable(ai().script_engine().lua());
+	::luabind::object staticChildren = ::luabind::newtable(ai().script_engine().lua());
 
 	for (int i = 0; i < zoomTextureWndList.size(); i++) {
 		CUIStatic* staticWnd = smart_cast<CUIStatic*>(zoomTextureWndList[i]);

@@ -35,7 +35,7 @@
 #include "PHElementInline.h"
 #include "PhysicsShellAnimator.h"
 #include "phshellbuildjoint.h"
-#include <boost/noncopyable.hpp>
+
 #ifdef DEBUG
 #include    "debug_output.h"
 #endif
@@ -344,6 +344,52 @@ void CPHShell::applyTorque(float x, float y, float z)
 	{
 		dir.mul(1.f / val);
 		applyTorque(dir, val);
+	}
+};
+
+void CPHShell::applyRelForce(const Fvector &dir, float val)
+{
+	if (!isActive())
+		return;
+	ELEMENT_I i = elements.begin(), e = elements.end();
+	val /= getMass();
+	for (; e != i; ++i)
+		(*i)->applyRelForce(dir, val * (*i)->getMass());
+	EnableObject(0);
+};
+
+void CPHShell::applyRelForce(float x, float y, float z)
+{
+	Fvector dir;
+	dir.set(x, y, z);
+	float val = dir.magnitude();
+	if (!fis_zero(val))
+	{
+		dir.mul(1.f / val);
+		applyRelForce(dir, val);
+	}
+};
+
+void CPHShell::applyRelTorque(const Fvector &dir, float val)
+{
+	if (!isActive())
+		return;
+	ELEMENT_I i = elements.begin(), e = elements.end();
+	val /= getMass();
+	for (; e != i; ++i)
+		(*i)->applyRelTorque(dir, val * (*i)->getMass());
+	EnableObject(0);
+};
+
+void CPHShell::applyRelTorque(float x, float y, float z)
+{
+	Fvector dir;
+	dir.set(x, y, z);
+	float val = dir.magnitude();
+	if (!fis_zero(val))
+	{
+		dir.mul(1.f / val);
+		applyRelTorque(dir, val);
 	}
 };
 
@@ -1066,7 +1112,7 @@ void CPHShell::SetCallbacks()
 	};
 	std::for_each(elements.begin(), elements.end(), set_bone_callback());
 
-	struct set_bone_reference : private boost::noncopyable
+	struct set_bone_reference : private xray::noncopyable
 	{
 		IKinematics& K;
 
@@ -1644,10 +1690,10 @@ void CPHShell::SetIgnoreRagDoll()
 }
 
 
-//Делает данный физический объек анимированным 
+//Р”РµР»Р°РµС‚ РґР°РЅРЅС‹Р№ С„РёР·РёС‡РµСЃРєРёР№ РѕР±СЉРµРє Р°РЅРёРјРёСЂРѕРІР°РЅРЅС‹Рј 
 void CPHShell::CreateShellAnimator(CInifile const* ini, LPCSTR section)
 {
-	//Для фильтра коллизий относим данный объект к классу анимированных
+	//Р”Р»СЏ С„РёР»СЊС‚СЂР° РєРѕР»Р»РёР·РёР№ РѕС‚РЅРѕСЃРёРј РґР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ Рє РєР»Р°СЃСЃСѓ Р°РЅРёРјРёСЂРѕРІР°РЅРЅС‹С…
 	CPHCollideValidator::SetAnimatedClass(*this);
 	m_pPhysicsShellAnimatorC = xr_new<CPhysicsShellAnimator>(this, ini, section);
 	VERIFY(PhysicsRefObject( ));
@@ -1655,17 +1701,17 @@ void CPHShell::CreateShellAnimator(CInifile const* ini, LPCSTR section)
 	//m_pPhysicsShellAnimatorC->ResetCallbacks();
 }
 
-//Настраивает фильтр коллизий на игнорирование столкновенний данного
-//физического объекта с анимированным физическим объектом
+//РќР°СЃС‚СЂР°РёРІР°РµС‚ С„РёР»СЊС‚СЂ РєРѕР»Р»РёР·РёР№ РЅР° РёРіРЅРѕСЂРёСЂРѕРІР°РЅРёРµ СЃС‚РѕР»РєРЅРѕРІРµРЅРЅРёР№ РґР°РЅРЅРѕРіРѕ
+//С„РёР·РёС‡РµСЃРєРѕРіРѕ РѕР±СЉРµРєС‚Р° СЃ Р°РЅРёРјРёСЂРѕРІР°РЅРЅС‹Рј С„РёР·РёС‡РµСЃРєРёРј РѕР±СЉРµРєС‚РѕРј
 void CPHShell::SetIgnoreAnimated()
 {
-	//Для фильтра коллизий указываем, что данный
-	//физический объект игнорирует анимированные физические тела
+	//Р”Р»СЏ С„РёР»СЊС‚СЂР° РєРѕР»Р»РёР·РёР№ СѓРєР°Р·С‹РІР°РµРј, С‡С‚Рѕ РґР°РЅРЅС‹Р№
+	//С„РёР·РёС‡РµСЃРєРёР№ РѕР±СЉРµРєС‚ РёРіРЅРѕСЂРёСЂСѓРµС‚ Р°РЅРёРјРёСЂРѕРІР°РЅРЅС‹Рµ С„РёР·РёС‡РµСЃРєРёРµ С‚РµР»Р°
 
 	CPHCollideValidator::SetAnimatedClassNotCollide(*this);
 }
 
-//Выдает информацию о том является ли данный объект анимированным
+//Р’С‹РґР°РµС‚ РёРЅС„РѕСЂРјР°С†РёСЋ Рѕ С‚РѕРј СЏРІР»СЏРµС‚СЃСЏ Р»Рё РґР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ Р°РЅРёРјРёСЂРѕРІР°РЅРЅС‹Рј
 
 
 void CPHShell::SetSmall()

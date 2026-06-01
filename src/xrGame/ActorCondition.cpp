@@ -98,7 +98,7 @@ void CActorCondition::LoadCondition(LPCSTR entity_section)
 	m_fAccelK = pSettings->r_float(section, "accel_k");
 	m_fSprintK = pSettings->r_float(section, "sprint_k");
 
-	//порог силы и здоровья меньше которого актер начинает хромать
+	//РїРѕСЂРѕРі СЃРёР»С‹ Рё Р·РґРѕСЂРѕРІСЊСЏ РјРµРЅСЊС€Рµ РєРѕС‚РѕСЂРѕРіРѕ Р°РєС‚РµСЂ РЅР°С‡РёРЅР°РµС‚ С…СЂРѕРјР°С‚СЊ
 	m_fLimpingHealthBegin = pSettings->r_float(section, "limping_health_begin");
 	m_fLimpingHealthEnd = pSettings->r_float(section, "limping_health_end");
 	R_ASSERT(m_fLimpingHealthBegin<=m_fLimpingHealthEnd);
@@ -223,33 +223,30 @@ void CActorCondition::UpdateCondition()
 	float base_weight = object().MaxCarryWeight();
 	float cur_weight = object().inventory().TotalWeight();
 
-	if ((object().mstate_real & mcAnyMove))
+	if (m_object->Holder() == nullptr)
 	{
-		ConditionWalk(cur_weight / base_weight,
-		              isActorAccelerated(object().mstate_real, object().IsZoomAimingMode()),
-		              (object().mstate_real & mcSprint) != 0);
-	}
-	else
-	{
-		ConditionStand(cur_weight / base_weight);
-	}
 
-	if (IsGameTypeSingle())
-	{
-		float k_max_power = 1.0f;
-		if (true)
+		if ((object().mstate_real & mcAnyMove))
 		{
-			k_max_power = 1.0f + _min(cur_weight, base_weight) / base_weight
-				+ _max(0.0f, (cur_weight - base_weight) / 10.0f);
+			ConditionWalk(cur_weight / base_weight, isActorAccelerated(object().mstate_real, object().IsZoomAimingMode()), (object().mstate_real & mcSprint) != 0);
 		}
 		else
 		{
-			k_max_power = 1.0f;
+			ConditionStand(cur_weight / base_weight);
 		}
-		float power_leak_speed = IsSleeping() ? m_fPowerLeakSpeedSleep : m_fPowerLeakSpeed;
-		SetMaxPower(GetMaxPower() - power_leak_speed * m_fDeltaTime * k_max_power);
-	}
 
+		if (IsGameTypeSingle())
+		{
+			float k_max_power = k_max_power = 1.0f + _min(cur_weight, base_weight) / base_weight
+					+ _max(0.0f, (cur_weight - base_weight) / 10.0f);
+			float power_leak_speed = IsSleeping() ? m_fPowerLeakSpeedSleep : m_fPowerLeakSpeed;
+			SetMaxPower(GetMaxPower() - power_leak_speed * m_fDeltaTime * k_max_power);
+		}
+	}
+	else
+	{
+		SetMaxPower(1.0f);
+	}
 
 	m_fAlcohol += v_alcohol * m_fDeltaTime;
 	clamp(m_fAlcohol, 0.0f, 1.0f);
@@ -525,7 +522,7 @@ void CActorCondition::PowerHit(float power, bool apply_outfit)
 	clamp(m_fPower, 0.f, 1.f);
 }
 
-//weight - "удельный" вес от 0..1
+//weight - "СѓРґРµР»СЊРЅС‹Р№" РІРµСЃ РѕС‚ 0..1
 void CActorCondition::ConditionJump(float weight)
 {
 	if (GodMode())
@@ -536,10 +533,17 @@ void CActorCondition::ConditionJump(float weight)
 	clamp(m_fPower, 0.f, 1.f);
 }
 
+// demonized: Progressive increase of stamina cost depending on weight
+BOOL progressiveStaminaCost = FALSE;
 void CActorCondition::ConditionWalk(float weight, bool accel, bool sprint)
 {
 	float power = m_fWalkPower;
-	power += m_fWalkWeightPower * weight * (weight > 1.f ? m_fOverweightWalkK : 1.f);
+
+	if (progressiveStaminaCost)
+		power += m_fWalkWeightPower * m_fOverweightWalkK * weight;
+	else
+		power += m_fWalkWeightPower * weight * (weight > 1.f ? m_fOverweightWalkK : 1.f);
+
 	power *= m_fDeltaTime * (accel ? (sprint ? m_fSprintK : m_fAccelK) : 1.f);
 	m_fPower -= HitPowerEffect(power);
 	clamp(m_fPower, 0.f, 1.f);
@@ -940,7 +944,7 @@ void CActorCondition::UpdateTutorialThresholds()
 
 	if (!b)
 	{
-		luabind::functor<LPCSTR> fl;
+		::luabind::functor<LPCSTR> fl;
 		R_ASSERT(ai().script_engine().functor<LPCSTR>(cb_name,fl));
 		fl();
 	}

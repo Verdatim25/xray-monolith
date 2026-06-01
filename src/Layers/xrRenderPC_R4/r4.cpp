@@ -14,7 +14,10 @@
 #include "../xrRenderDX10/3DFluid/dx103DFluidManager.h"
 #include "../xrRender/ShaderResourceTraits.h"
 
+#include "../../xrCore/profiler.h"
+
 #include "D3DX10Core.h"
+#include "../xrRender/SkeletonX.h"
 
 CRender RImplementation;
 
@@ -345,6 +348,7 @@ void CRender::create()
 	if (strstr(Core.Params, "-smap2560")) o.smapsize = 2560;
 	if (strstr(Core.Params, "-smap3072")) o.smapsize = 3072;
 	if (strstr(Core.Params, "-smap4096")) o.smapsize = 4096;
+	if (strstr(Core.Params, "-smap8192")) o.smapsize = 8192;
 
 	// gloss
 	char* g = strstr(Core.Params, "-gloss ");
@@ -398,9 +402,8 @@ void CRender::create()
 	// HDR10
 	o.dx11_hdr10 = !!ps_r4_hdr10_on;
 
-	//	MSAA option dependencies
-	o.dx10_msaa = ps_r3_msaa && !o.dx11_hdr10;
-	o.dx10_msaa_samples = o.dx11_hdr10 ? 1 : (1 << ps_r3_msaa);
+	o.dx10_msaa = 0; 
+	o.dx10_msaa_samples = 1;
 
 	o.dx10_msaa_opt = ps_r2_ls_flags.test(R3FLAG_MSAA_OPT);
 	o.dx10_msaa_opt = o.dx10_msaa_opt && o.dx10_msaa && (HW.FeatureLevel >= D3D_FEATURE_LEVEL_10_1)
@@ -475,7 +478,7 @@ void CRender::create()
 	o.ssfx_core = FS.exist(fn, "$game_shaders$", "r3\\screenspace_common", ".h") ? 1 : 0;
 	o.ssfx_rain = FS.exist(fn, "$game_shaders$", "r3\\effects_rain_splash", ".ps") ? 1 : 0;
 	o.ssfx_blood = FS.exist(fn, "$game_shaders$", "r3\\effects_wallmark_blood", ".ps") ? 1 : 0;
-	o.ssfx_branches = FS.exist(fn, "$game_shaders$", "r3\\deffer_tree_branch_bump-hq", ".vs") ? 1 : 0;
+	o.ssfx_branches = FS.exist(fn, "$game_shaders$", "r3\\deffer_tree_branch_aref_bump-hq", ".ps") ? 1 : 0;
 	o.ssfx_hud_raindrops = FS.exist(fn, "$game_shaders$", "r3\\deffer_base_hud_bump", ".ps") ? 1 : 0;
 	o.ssfx_ssr = FS.exist(fn, "$game_shaders$", "r3\\ssfx_ssr", ".ps") ? 1 : 0;
 	o.ssfx_terrain = FS.exist(fn, "$game_shaders$", "r3\\deffer_terrain_high_flat_d", ".ps") ? 1 : 0;
@@ -485,10 +488,16 @@ void CRender::create()
 	o.ssfx_il = FS.exist(fn, "$game_shaders$", "r3\\ssfx_il", ".ps") ? 1 : 0;
 	o.ssfx_sss = FS.exist(fn, "$game_shaders$", "r3\\ssfx_sss", ".ps") ? 1 : 0;
 	o.ssfx_bloom = FS.exist(fn, "$game_shaders$", "r3\\ssfx_bloom", ".ps") ? 1 : 0;
+	o.ssfx_taa = FS.exist(fn, "$game_shaders$", "r3\\ssfx_taa", ".ps") ? 1 : 0;
+	o.ssfx_fog = FS.exist(fn, "$game_shaders$", "r3\\ssfx_fog_scattering", ".ps") ? 1 : 0;
+	o.ssfx_motionblur = FS.exist(fn, "$game_shaders$", "r3\\ssfx_motion_blur", ".ps") ? 1 : 0;
+	o.ssfx_motionvectors = FS.exist(fn, "$game_shaders$", "r3\\screenspace_mvectors", ".h") ? 1 : 0;
+	o.ssfx_glass = FS.exist(fn, "$game_shaders$", "r3\\ssfx_glass", ".ps") ? 1 : 0; 
 
-	Msg("- Supports SSS UPDATE 22");
+	Msg("- Supports SSS UPDATE 23");
 	Msg("- SSS CORE INSTALLED %i", o.ssfx_core);
-	Msg("- SSS HUD RAINDROPS SHADER INSTALLED %i", o.ssfx_hud_raindrops);
+	Msg("- SSS HUD SHADER INSTALLED %i", o.ssfx_hud_raindrops);
+	Msg("- SSS MOTION VECTORS SHADER INSTALLED %i", o.ssfx_motionvectors);
 	Msg("- SSS RAIN SHADER INSTALLED %i", o.ssfx_rain);
 	Msg("- SSS BLOOD SHADER INSTALLED %i", o.ssfx_blood);
 	Msg("- SSS BRANCHES SHADER INSTALLED %i", o.ssfx_branches);
@@ -500,6 +509,10 @@ void CRender::create()
 	Msg("- SSS IL SHADER INSTALLED %i", o.ssfx_il);
 	Msg("- SSS SSS SHADER INSTALLED %i", o.ssfx_sss);
 	Msg("- SSS BLOOM SHADER INSTALLED %i", o.ssfx_bloom);
+	Msg("- SSS FOG SHADER INSTALLED %i", o.ssfx_fog);
+	Msg("- SSS GLASS SHADER INSTALLED %i", o.ssfx_glass);
+	Msg("- SSS MOTION BLUR SHADER INSTALLED %i", o.ssfx_motionblur);
+	Msg("- SSS TAA SHADER INSTALLED %i", o.ssfx_taa);
 
 	// constants
 	CResourceManager* RM = dxRenderDeviceRender::Instance().Resources;
@@ -517,8 +530,8 @@ void CRender::create()
 
 	m_bMakeAsyncSS = false;
 
-	Target = xr_new<CRenderTarget>(); // Main target
-
+	initializeTargets();
+	
 	Models = xr_new<CModelPool>();
 	PSLibrary.OnCreate();
 	HWOCC.occq_create(occq_size);
@@ -556,35 +569,31 @@ void CRender::destroy()
 	for (u32 i = 0; i < HW.Caps.iGPUNum; ++i)
 	_RELEASE(q_sync_point[i]);
 
+	deleteTargets();
 	HWOCC.occq_destroy();
 	xr_delete(Models);
-	xr_delete(Target);
 	PSLibrary.OnDestroy();
 	Device.seqFrame.Remove(this);
 	r_dsgraph_destroy();
+
+}
+
+void CRender::initializeTargets()
+{
+	TargetMain = xr_new<CRenderTarget>("main", Device.dwWidth, Device.dwHeight);
+	TargetSVP = xr_new<CRenderTarget>("svp", Device.svp_width(), Device.svp_height());
+	TargetMain->SetActive();
+}
+
+void CRender::deleteTargets()
+{
+	Target = nullptr;
+	xr_delete(TargetMain);
+	xr_delete(TargetSVP);
 }
 
 void CRender::reset_begin()
 {
-	// Update incremental shadowmap-visibility solver
-	// BUG-ID: 10646
-	{
-		u32 it = 0;
-		for (it = 0; it < Lights_LastFrame.size(); it++)
-		{
-			if (0 == Lights_LastFrame[it]) continue ;
-			try
-			{
-				Lights_LastFrame[it]->svis.resetoccq();
-			}
-			catch (...)
-			{
-				Msg("! Failed to flush-OCCq on light [%d] %X", it, *(u32*)(&Lights_LastFrame[it]));
-			}
-		}
-		Lights_LastFrame.clear();
-	}
-
 	//AVO: let's reload details while changed details options on vid_restart
 	if (b_loaded && ((dm_current_size != dm_size) || (ps_r__Detail_density != ps_current_detail_density) || (
 		ps_r__Detail_height != ps_current_detail_height)))
@@ -594,7 +603,7 @@ void CRender::reset_begin()
 	}
 	//-AVO
 
-	xr_delete(Target);
+	deleteTargets();
 	HWOCC.occq_destroy();
 	//_RELEASE					(q_sync_point[1]);
 	//_RELEASE					(q_sync_point[0]);
@@ -618,7 +627,7 @@ void CRender::reset_end()
 	//R_CHK						(HW.pDevice->CreateQuery(D3DQUERYTYPE_EVENT,&q_sync_point[1]));
 	HWOCC.occq_create(occq_size);
 
-	Target = xr_new<CRenderTarget>();
+	initializeTargets();
 
 	//AVO: let's reload details while changed details options on vid_restart
 	if (b_loaded && ((dm_current_size != dm_size) || (ps_r__Detail_density != ps_current_detail_density) || (
@@ -647,6 +656,7 @@ fastdelegate::FastDelegate0<>(&HOM,&CHOM::MT_RENDER));
 }*/
 void CRender::OnFrame()
 {
+	PROF_EVENT("CRender::OnFrame()");
 	Models->DeleteQueue();
 	if (ps_r2_ls_flags.test(R2FLAG_EXP_MT_CALC))
 	{
@@ -734,8 +744,9 @@ IRenderVisual* CRender::model_CreateParticles(LPCSTR name)
 }
 
 void CRender::models_Prefetch() { Models->Prefetch(); }
-void CRender::models_PrefetchOne(LPCSTR name) { Models->Prefetch_One(name); }
+void CRender::models_PrefetchOne(LPCSTR name, bool assert) { Models->Prefetch_One(name, assert); }
 void CRender::models_Clear(BOOL b_complete) { Models->ClearPool(b_complete); }
+bool CRender::models_Exists(LPCSTR name) { return Models->Exists(name); }
 
 ref_shader CRender::getShader(int id)
 {
@@ -924,6 +935,15 @@ CRender::CRender()
 	: m_bFirstFrameAfterReset(false)
 {
 	init_cacades();
+
+	Device.m_SecondViewport.get_bone_matrix = [](IKinematics* k, IRenderVisual* v, Fmatrix& m) -> bool {
+		auto s = dynamic_cast<CSkeletonX*>(v);
+		if (s && k) {
+			m = k->LL_GetTransform_R(s->get_RMS_boneid());
+			return true;
+		}
+		return false;
+	};
 }
 
 CRender::~CRender()
@@ -1256,8 +1276,6 @@ public:
 		return D3D_OK;
 	}
 };
-
-#include <boost/crc.hpp>
 
 static inline bool match_shader_id(LPCSTR const debug_shader_id, LPCSTR const full_shader_id,
                                    FS_FileSet const& file_set, string_path& result);
@@ -1779,63 +1797,63 @@ HRESULT CRender::shader_compile(
 		++len;
 	}
 
-	xr_sprintf(c_ssr_quality, "%d", u8(min(max(ps_ssfx_ssr_quality, 0), 5)));
+	xr_sprintf(c_ssr_quality, "%d", u8(std::min(std::max(ps_ssfx_ssr_quality, 0), 5)));
 	defines[def_it].Name = "SSFX_SSR_QUALITY";
 	defines[def_it].Definition = c_ssr_quality;
 	def_it++;
 	xr_strcat(sh_name, c_ssr_quality);
 	len += xr_strlen(c_ssr_quality);
 
-	xr_sprintf(c_ssfx_water, "%d", u8(min(max(ps_ssfx_water_quality.x, 0.0f), 4.0f)));
+	xr_sprintf(c_ssfx_water, "%d", u8(std::min(std::max(ps_ssfx_water_quality.x, 0.0f), 4.0f)));
 	defines[def_it].Name = "SSFX_WATER_QUALITY";
 	defines[def_it].Definition = c_ssfx_water;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_water);
 	len += xr_strlen(c_ssfx_water);
 
-	xr_sprintf(c_ssfx_water_parallax, "%d", u8(min(max(ps_ssfx_water_quality.y, 0.0f), 3.0f)));
+	xr_sprintf(c_ssfx_water_parallax, "%d", u8(std::min(std::max(ps_ssfx_water_quality.y, 0.0f), 3.0f)));
 	defines[def_it].Name = "SSFX_WATER_PARALLAX";
 	defines[def_it].Definition = c_ssfx_water_parallax;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_water_parallax);
 	len += xr_strlen(c_ssfx_water_parallax);
 
-	xr_sprintf(c_ssfx_il, "%d", u8(min(max(ps_ssfx_il_quality, 0), 64)));
+	xr_sprintf(c_ssfx_il, "%d", u8(std::min(std::max(ps_ssfx_il_quality, 0), 64)));
 	defines[def_it].Name = "SSFX_IL_QUALITY";
 	defines[def_it].Definition = c_ssfx_il;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_il);
 	len += xr_strlen(c_ssfx_il);
 
-	xr_sprintf(c_ssfx_ao, "%d", u8(min(max(ps_ssfx_ao_quality, 2), 8)));
+	xr_sprintf(c_ssfx_ao, "%d", u8(std::min(std::max(ps_ssfx_ao_quality, 2), 8)));
 	defines[def_it].Name = "SSFX_AO_QUALITY";
 	defines[def_it].Definition = c_ssfx_ao;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_ao);
 	len += xr_strlen(c_ssfx_ao);
 
-	xr_sprintf(c_ssfx_pom_refine, "%d", u8(min(max(ps_ssfx_pom_refine, 0), 1)));
+	xr_sprintf(c_ssfx_pom_refine, "%d", u8(std::min(std::max(ps_ssfx_pom_refine, 0), 1)));
 	defines[def_it].Name = "SSFX_POM_REFINE";
 	defines[def_it].Definition = c_ssfx_pom_refine;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_pom_refine);
 	len += xr_strlen(c_ssfx_pom_refine);
 
-	xr_sprintf(c_ssfx_terrain_pom_refine, "%d", u8(min(max(ps_ssfx_terrain_pom_refine, 0), 1)));
+	xr_sprintf(c_ssfx_terrain_pom_refine, "%d", u8(std::min(std::max(ps_ssfx_terrain_pom_refine, 0), 1)));
 	defines[def_it].Name = "SSFX_TERRA_POM_REFINE";
 	defines[def_it].Definition = c_ssfx_terrain_pom_refine;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_terrain_pom_refine);
 	len += xr_strlen(c_ssfx_terrain_pom_refine);
 
-	xr_sprintf(c_ssfx_sss_dir_quality, "%d", u8(min(max((int)ps_ssfx_sss_quality.x, 1), 24)));
+	xr_sprintf(c_ssfx_sss_dir_quality, "%d", u8(std::min(std::max((int)ps_ssfx_sss_quality.x, 1), 24)));
 	defines[def_it].Name = "SSFX_SSS_DIR_QUALITY";
 	defines[def_it].Definition = c_ssfx_sss_dir_quality;
 	def_it++;
 	xr_strcat(sh_name, c_ssfx_sss_dir_quality);
 	len += xr_strlen(c_ssfx_sss_dir_quality);
 
-	xr_sprintf(c_ssfx_sss_omni_quality, "%d", u8(min(max((int)ps_ssfx_sss_quality.y, 1), 12)));
+	xr_sprintf(c_ssfx_sss_omni_quality, "%d", u8(std::min(std::max((int)ps_ssfx_sss_quality.y, 1), 12)));
 	defines[def_it].Name = "SSFX_SSS_OMNI_QUALITY";
 	defines[def_it].Definition = c_ssfx_sss_omni_quality;
 	def_it++;
@@ -2025,9 +2043,7 @@ HRESULT CRender::shader_compile(
 			u32 crc = 0;
 			crc = file->r_u32();
 
-			boost::crc_32_type processor;
-			processor.process_block(file->pointer(), ((char*)file->pointer()) + file->elapsed());
-			u32 const real_crc = processor.checksum();
+			u32 const real_crc = crc32(file->pointer(), file->elapsed());
 
 			if (real_crc == crc)
 			{
@@ -2058,10 +2074,7 @@ HRESULT CRender::shader_compile(
 		{
 			IWriter* file = FS.w_open(file_name);
 
-			boost::crc_32_type processor;
-			processor.process_block(pShaderBuf->GetBufferPointer(),
-			                        ((char*)pShaderBuf->GetBufferPointer()) + pShaderBuf->GetBufferSize());
-			u32 const crc = processor.checksum();
+			u32 const crc = crc32(pShaderBuf->GetBufferPointer(), pShaderBuf->GetBufferSize());
 
 			file->w_u32(crc);
 			file->w(pShaderBuf->GetBufferPointer(), (u32)pShaderBuf->GetBufferSize());

@@ -10,6 +10,7 @@ class CUIWindow;
 #include "actor_defs.h"
 #include "inventory_space.h"
 #include "hudsound.h"
+#include "HUDManager.h"
 
 #define TENDTO_SPEED         1.0f     // Модификатор силы инерции (больше - чувствительней)
 #define TENDTO_SPEED_AIM     1.0f     // (Для прицеливания)
@@ -22,8 +23,24 @@ class CUIWindow;
 #define ORIGIN_OFFSET        0.04f,  0.04f,  0.04f, 0.02f
 #define ORIGIN_OFFSET_AIM    0.015f, 0.015f, 0.01f, 0.005f
 
+// Lucy: Uncomment if there ever is a use for correct visbox on HUD models
+// #define ATTACHMENT_HUD_VISBOX
+
 struct attachable_hud_item;
 class motion_marks;
+
+enum ENearWallMode {
+	NW_OFF = 0,
+	NW_FOV,
+	NW_POS,
+	NW_MAX
+};
+
+enum ENearWallTrace {
+	NT_CAM = 0,
+	NT_ITEM,
+	NT_MAX
+};
 
 class CHUDState
 {
@@ -187,7 +204,13 @@ public:
 	attachable_hud_item* HudItemData();
 	bool IsAttachedToHUD();
 	virtual bool ParentIsActor();
-	virtual float GetHudFov();
+	virtual float GetNearWallRange();
+	virtual float GetBaseHudFov();
+	virtual float GetTargetHudFov();
+	virtual float GetTargetNearWallOffset();
+	void UpdateNearWall();
+	float GetNearWallOffset();
+	float GetHudFov();
 	virtual void on_outfit_changed();
 	virtual void on_a_hud_attach();
 	virtual void on_b_hud_detach();
@@ -204,8 +227,6 @@ public:
 	virtual bool render_item_3d_ui_query() { return true; }
 
 	virtual bool CheckCompatibility(CHudItem*) { return true; }
-
-	virtual collide::rq_result& GetRQ();
 protected:
 
 	IC void SetPending(bool H) { m_huditem_flags.set(fl_pending, H); }
@@ -257,14 +278,49 @@ public:
 	float m_hud_fov_add_mod;
 	float m_nearwall_dist_max;
 	float m_nearwall_dist_min;
-	float m_nearwall_last_hud_fov;
+	float m_nearwall_factor;
 	float m_nearwall_target_hud_fov;
 	float m_nearwall_speed_mod;
 	float m_base_fov;
+	float m_hud_fov;
+	float m_nearwall_ofs;
 
 	virtual CHudItem* cast_hud_item() { return this; }
 	virtual bool PlayAnimCrouchIdleMoving(); //AVO: new crouch idle animation
 	bool HudAnimationExist(LPCSTR anim_name);
+
+private:
+	SPickParam PP;
+
+public:
+	virtual void OnFrame();
+	void net_Relcase(CObject* O);
+
+	void ApplyAimModifiers(Fmatrix& matrix);
+	virtual Fmatrix RayTransform();
+	virtual void g_fireParams(SPickParam& pp) {};
+	virtual void Ray(SPickParam& pp);
+	void UpdatePick();
+	SPickParam& GetPick() { return PP; };
+	collide::rq_result& GetRQ() { return GetPick().result; };
+	float GetRQVis() { return PP.power; };
+
+#ifdef ATTACHMENT_HUD_VISBOX
+	typedef void __stdcall hud_visual_callback(IKinematics*);
+	typedef svector<hud_visual_callback*, 6> HUD_CALLBACK_VECTOR;
+	typedef HUD_CALLBACK_VECTOR::iterator HUD_CALLBACK_VECTOR_IT;
+
+	HUD_CALLBACK_VECTOR m_visual_callback;
+
+	void add_visual_callback(hud_visual_callback* callback);
+	void remove_visual_callback(hud_visual_callback* callback);
+	void SetKinematicsCallback(bool set);
+
+	IC HUD_CALLBACK_VECTOR& visual_callbacks()
+	{
+		return (m_visual_callback);
+	}
+#endif
 };
 
 class CAnonHudItem : public CHudItem

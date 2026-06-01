@@ -38,6 +38,7 @@ public:
 	//	void								Apply			(u32 dwStage);
 
 	void surface_set(ID3DBaseTexture* surf);
+	void fast_set_unsafe(CTexture* source);
 	ID3DBaseTexture* surface_get();
 
 	IC BOOL isUser() { return flags.bUser; }
@@ -107,6 +108,9 @@ public: //	Public class members (must be encapsulated furthur)
 	};
 
 private:
+	// has been set via unsafe_fast_set
+	// This is a quick hack to prevent release of invalid textures
+	bool unsafe_set = false;  
 	ID3DBaseTexture* pSurface;
 	// Sequence data
 	xr_vector<ID3DBaseTexture*> seqDATA;

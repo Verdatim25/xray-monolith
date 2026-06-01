@@ -9,7 +9,8 @@
 #include "NewZoomFlag.h"
 #include "object_broker.h"
 #include "inventory.h"
-
+BOOL binoculars_dynamic_zoom_check = FALSE;
+BOOL useNewZoomDeltaAlgorithm = FALSE;
 extern float n_zoom_step_count;
 float czoom;
 
@@ -34,6 +35,24 @@ void CWeaponBinoculars::Load(LPCSTR section)
 	m_bVision = !!pSettings->r_bool(section, "vision_present");
 }
 
+bool CWeaponBinoculars::NeedBlendAnm()
+{
+	return false;
+}
+
+bool CWeaponBinoculars::MovingAnimAllowedNow()
+{
+	return true;
+}
+
+Fmatrix CWeaponBinoculars::RayTransform()
+{
+	Fmatrix matrix = CHudItem::RayTransform();
+	matrix.i = Device.vCameraTop;
+	matrix.j = Device.vCameraRight;
+	matrix.k = Device.vCameraDirection;
+	return matrix;
+}
 
 bool CWeaponBinoculars::Action(u16 cmd, u32 flags)
 {
@@ -111,19 +130,20 @@ void CWeaponBinoculars::render_item_ui()
 }
 
 // demonized: new zoom delta change to have same multiple between steps for same visual change with each step
-BOOL useNewZoomDeltaAlgorithm = FALSE;
 void newGetZoomDelta(const float scope_factor, float& delta, const float min_zoom_factor, float steps)
 {
 	delta = pow(scope_factor / min_zoom_factor, 1.0f / steps);
 }
 
-void GetZoomData(const float scope_factor, const float zoom_step_count, float& delta, float& min_zoom_factor)
+void GetZoomData(const float scope_factor, const float zoom_step_count, float min_zoom_setting, float& delta, float& min_zoom_factor)
 {
 	float def_fov = float(g_fov);
 	float min_zoom_k = 0.3f;
 	float delta_factor_total = def_fov - scope_factor;
 	VERIFY(delta_factor_total > 0);
 	min_zoom_factor = def_fov - delta_factor_total * min_zoom_k;
+	if (min_zoom_factor > min_zoom_setting)
+		min_zoom_factor = min_zoom_setting;
 	float steps = zoom_step_count ? zoom_step_count : 3.0;
 	delta = (min_zoom_factor - scope_factor) / steps;
 	if (useNewZoomDeltaAlgorithm)
@@ -132,7 +152,7 @@ void GetZoomData(const float scope_factor, const float zoom_step_count, float& d
 
 void newGetZoomData(const float scope_factor, const float zoom_step_count, float& delta, float& min_zoom_factor, float c_zoom)
 {
-	GetZoomData(scope_factor, zoom_step_count, delta, min_zoom_factor);
+	GetZoomData(scope_factor, zoom_step_count, 200.0, delta, min_zoom_factor);
 	float steps = zoom_step_count ? zoom_step_count : n_zoom_step_count;
 	delta = (min_zoom_factor - scope_factor) / steps;
 	if (useNewZoomDeltaAlgorithm)
@@ -141,11 +161,13 @@ void newGetZoomData(const float scope_factor, const float zoom_step_count, float
 
 void CWeaponBinoculars::ZoomInc()
 {
+	if (binoculars_dynamic_zoom_check && !m_zoom_params.m_bUseDynamicZoom) return;
+
 	float delta, min_zoom_factor;
 	if (zoomFlags.test(NEW_ZOOM)) {
 		newGetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, czoom);
 	} else {
-		GetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+		GetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 	}
 
 	float f = useNewZoomDeltaAlgorithm ? GetZoomFactor() * delta : GetZoomFactor() - delta;
@@ -156,14 +178,16 @@ void CWeaponBinoculars::ZoomInc()
 
 void CWeaponBinoculars::ZoomDec()
 {
+	if (binoculars_dynamic_zoom_check && !m_zoom_params.m_bUseDynamicZoom) return;
+
 	float delta, min_zoom_factor;
 	if (zoomFlags.test(NEW_ZOOM)) {
 		newGetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor, czoom);
 	} else {
-		GetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, delta, min_zoom_factor);
+		GetZoomData(m_zoom_params.m_fScopeZoomFactor, m_zoom_params.m_fZoomStepCount, m_zoom_params.m_fMinBaseZoomFactor, delta, min_zoom_factor);
 	}
 
-	float f = useNewZoomDeltaAlgorithm ? GetZoomFactor() / max(delta, 0.001f) : GetZoomFactor() + delta;
+	float f = useNewZoomDeltaAlgorithm ? GetZoomFactor() / std::max(delta, 0.001f) : GetZoomFactor() + delta;
 	clamp(f, m_zoom_params.m_fScopeZoomFactor, min_zoom_factor);
 	SetZoomFactor(f);
     czoom = f;
@@ -191,7 +215,7 @@ bool CWeaponBinoculars::GetBriefInfo(II_BriefInfo& info)
 
 void CWeaponBinoculars::net_Relcase(CObject* object)
 {
-	inherited::net_Relcase(object);
+	CHudItem::net_Relcase(object);
 
 	if (!m_binoc_vision)
 		return;

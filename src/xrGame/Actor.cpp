@@ -82,13 +82,19 @@
 #include "ActorBackpack.h"
 #include "script_hit.h"
 #include "../../xrServerEntities/script_engine.h"
-using namespace luabind;
+
 //-Alundaio
 
 //Rezy
 #include "xrEngine\x_ray.h"
 #include "ui/UIHudStatesWnd.h"
 #include "script_attachment_manager.h"
+#include "debug_renderer.h"
+#include <Layers/xrRender/xrRender_console.h>
+
+#ifdef STATIONARYMGUN_NEW
+#include "WeaponStatMgun.h"
+#endif
 
 const u32 patch_frames = 50;
 const float respawn_delay = 1.f;
@@ -673,7 +679,7 @@ void CActor::Hit(SHit* pHDS)
 			{
 				CScriptHit tLuaHit(&HDS);
 
-				luabind::functor<bool> funct;
+				::luabind::functor<bool> funct;
 				if (ai().script_engine().functor("_G.CActor__BeforeHitCallback", funct))
 				{
 					if (!funct(this->lua_game_object(), &tLuaHit, HDS.boneID))
@@ -857,6 +863,10 @@ extern BOOL firstPersonDeath;
 
 void CActor::Die(CObject* who)
 {
+#ifdef HOLDERCUSTOM_NEW
+	use_HolderEx(NULL, true);
+#endif
+
 #ifdef DEBUG
     Msg("--- Actor [%s] dies !", this->Name());
 #endif // #ifdef DEBUG
@@ -1086,7 +1096,7 @@ void CActor::g_Physics(Fvector& _accel, float jump, float dt)
 float g_fov = 55.0f;
 extern float g_ironsights_factor;
 
-float CActor::currentFOV()
+float CActor::currentFOV(bool wantSVPFov = false)
 {
 	if (!psHUD_Flags.is(HUD_WEAPON | HUD_WEAPON_RT | HUD_WEAPON_RT2))
 		return g_fov;
@@ -1100,6 +1110,8 @@ float CActor::currentFOV()
 	{
 		if (pWeapon->GetZoomFactor() == 0)
 			return atan(tan(g_fov * (0.5 * PI / 180)) / g_ironsights_factor) / (0.5 * PI / 180);
+		else if (Device.m_SecondViewport.IsSVPActive() && !wantSVPFov)
+			return g_fov;
 		else
 			return pWeapon->GetZoomFactor() * (0.75f);
 	}
@@ -1107,6 +1119,16 @@ float CActor::currentFOV()
 	{
 		return g_fov;
 	}
+}
+
+bool CActor::scopeCameraMatrix(Fmatrix& camera)
+{
+	CWeapon* pWeapon = smart_cast<CWeapon*>(inventory().ActiveItem());
+	if (pWeapon) {
+		return pWeapon->GetSVPCameraMatrix(camera);
+	}
+	camera = Device.mInvView;
+	return false;
 }
 
 #include "UI\UIInventoryUtilities.h"
@@ -1166,6 +1188,10 @@ void CActor::UpdateCL()
 
 	cam_Update(float(Device.dwTimeDelta) / 1000.0f, currentFOV());
 
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(Holder());
+#endif
+
 	if (Level().CurrentEntity() && this->ID() == Level().CurrentEntity()->ID())
 	{
 		psHUD_Flags.set(HUD_CROSSHAIR_RT2, true);
@@ -1215,19 +1241,27 @@ void CActor::UpdateCL()
 			// Apply Weapon Data in Shaders
 			g_pGamePersistent->m_pGShaderConstants->hud_params.x = pWeapon->GetZRotatingFactor();
 			g_pGamePersistent->m_pGShaderConstants->hud_params.y = pWeapon->GetSecondVPZoomFactor();
-			g_pGamePersistent->m_pGShaderConstants->hud_params.z = pWeapon->m_nearwall_last_hud_fov;
-			g_pGamePersistent->m_pGShaderConstants->hud_params.w = Device.m_SecondViewport.IsSVPFrame();
+			g_pGamePersistent->m_pGShaderConstants->hud_params.z = pWeapon->GetHudFov();
 
 			g_pGamePersistent->m_pGShaderConstants->hud_fov_params.x = pWeapon->CurrentZoomFactor();
 			g_pGamePersistent->m_pGShaderConstants->hud_fov_params.y = pWeapon->GetMinScopeZoomFactor();
 		}
 	}
+#ifdef STATIONARYMGUN_NEW
+	else if (stm && !stm->IsCameraZoom())
+	{
+		HUD().SetCrosshairDisp(0.05);
+		HUD().ShowCrosshair(true);
+		g_pGamePersistent->m_pGShaderConstants->hud_params.set(0.f, 0.f, 0.f, 0.f);
+		g_pGamePersistent->m_pGShaderConstants->m_blender_mode.set(0.f, 0.f, 0.f, 0.f);
+	}
+#endif
 	else
 	{
 		if (Level().CurrentEntity() && this->ID() == Level().CurrentEntity()->ID())
 		{
 			HUD().SetCrosshairDisp(0.f);
-			HUD().ShowCrosshair(false);
+			HUD().ShowCrosshair(psCrosshair_Flags.is(CROSSHAIR_SHOW_ALWAYS));
 
 			// Clearing Weapons Information in Shaders
 			g_pGamePersistent->m_pGShaderConstants->hud_params.set(0.f, 0.f, 0.f, 0.f);
@@ -1291,7 +1325,7 @@ void CActor::UpdateCL()
 		if (!discord_gameinfo.loadscreen && discord_gameinfo.ex_update)
 		{
 			//Update Iron Man state and lives
-			luabind::functor<bool> ironman_enabled;
+			::luabind::functor<bool> ironman_enabled;
 			if (ai().script_engine().functor("_g.IsHardcoreMode", ironman_enabled))
 			{
 				if (ironman_enabled && ironman_enabled())
@@ -1303,7 +1337,7 @@ void CActor::UpdateCL()
 			if (discord_gameinfo.ironman)
 			{
 				//Lives left
-				luabind::functor<int> ironman_lives;
+				::luabind::functor<int> ironman_lives;
 				if (ai().script_engine().functor("ironman_manager.get_lives_left", ironman_lives))
 				{
 					if (ironman_lives)
@@ -1325,7 +1359,7 @@ void CActor::UpdateCL()
 			}
 
 			//Story Mode
-			luabind::functor<bool> game_mode;
+			::luabind::functor<bool> game_mode;
 			if (ai().script_engine().functor("_g.IsStoryMode", game_mode) && game_mode())
 				snprintf(discord_gameinfo.gamemode, 128, xr_ToUTF8(*CStringTable().translate("st_cap_check_story")));
 
@@ -1338,7 +1372,7 @@ void CActor::UpdateCL()
 			{
 				snprintf(discord_gameinfo.gamemode, 128, xr_ToUTF8(*CStringTable().translate("st_cap_check_azazel_mode")));
 
-				luabind::functor<int> possessed_lives;
+				::luabind::functor<int> possessed_lives;
 				if (ai().script_engine().functor("azazel_mode.get_possessed_lives", possessed_lives))
 				{
 					int lives_possessed = possessed_lives();
@@ -1393,7 +1427,7 @@ void CActor::set_safemode(bool status)
 void CActor::RPC_UpdateFaction()
 {
 	//Update player's REAL Faction
-	luabind::functor<LPCSTR> real_faction;
+	::luabind::functor<LPCSTR> real_faction;
 	if (ai().script_engine().functor("_g.get_actor_true_community", real_faction))
 	{
 		if (real_faction)
@@ -1410,7 +1444,7 @@ void CActor::RPC_UpdateFaction()
 void CActor::RPC_UpdateRank()
 {
 	//Rank		
-	luabind::functor<LPCSTR> actor_rank;
+	::luabind::functor<LPCSTR> actor_rank;
 	if (ai().script_engine().functor("ranks.get_player_rank_name", actor_rank))
 	{
 		if (actor_rank)
@@ -1426,13 +1460,13 @@ void CActor::RPC_UpdateRank()
 void CActor::RPC_UpdateReputation()
 {
 	//Reputation		
-	luabind::functor<int> actor_rep_val;
+	::luabind::functor<int> actor_rep_val;
 	if (ai().script_engine().functor("ranks.get_player_reputation", actor_rep_val))
 	{
 		if (actor_rep_val)
 		{
 			int reputation = actor_rep_val();
-			luabind::functor<LPCSTR> actor_rep;
+			::luabind::functor<LPCSTR> actor_rep;
 			if (ai().script_engine().functor("alun_utils.get_reputation_name", actor_rep))
 			{
 				if (actor_rep)
@@ -1447,6 +1481,136 @@ void CActor::RPC_UpdateReputation()
 }
 
 #include "../xrphysics/actorcameracollision.h"
+
+#ifdef HOLDERCUSTOM_NEW
+bool CActor::use_HolderEx(CHolderCustom *object, bool bForce)
+{
+	if (object)
+	{
+		return attach_Vehicle(object, bForce);
+	}
+	detach_Vehicle(bForce);
+	return true;
+}
+
+bool CActor::attach_Vehicle(CHolderCustom *object, bool bForce)
+{
+	if (object && !object->EnterLocked() || bForce)
+	{
+		Fvector center;
+		Center(center);
+		if ((bForce || object->Use(Device.vCameraPosition, Device.vCameraDirection, center)) && object->attach_Actor(this))
+		{
+			inventory().SetPrevActiveSlot(inventory().GetActiveSlot());
+			inventory().SetActiveSlot(NO_ACTIVE_SLOT);
+			SetWeaponHideState(INV_STATE_BLOCK_ALL, true);
+
+			character_physics_support()->movement()->DestroyCharacter();
+
+			m_holder = object;
+			m_holderID = smart_cast<CObject *>(object)->ID();
+
+			if (pCamBobbing)
+			{
+				Cameras().RemoveCamEffector(eCEBobbing);
+				pCamBobbing = NULL;
+			}
+
+			if (actor_camera_shell)
+				destroy_physics_shell(actor_camera_shell);
+
+			IKinematics *K = smart_cast<IKinematics *>(Visual());
+			K->LL_GetBoneInstance(K->LL_BoneID("bip01_spine")).reset_callback();
+			K->LL_GetBoneInstance(K->LL_BoneID("bip01_spine1")).reset_callback();
+			K->LL_GetBoneInstance(K->LL_BoneID("bip01_spine2")).reset_callback();
+
+			CCar *car = smart_cast<CCar *>(object);
+#ifdef CAR_NEW
+			if (car && car->IsRemoteControl() == false)
+#else
+			if (car)
+#endif
+			{
+				u16 anim_type = car->DriverAnimationType();
+				SVehicleAnimCollection &anims = m_vehicle_anims->m_vehicles_type_collections[anim_type];
+				IKinematicsAnimated *V = smart_cast<IKinematicsAnimated *>(Visual());
+				R_ASSERT(V);
+				V->PlayCycle(anims.idles[0], FALSE);
+				CStepManager::on_animation_start(MotionID(), 0);
+			}
+
+#ifdef STATIONARYMGUN_NEW
+			CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(object);
+			if (stm)
+			{
+				stm->UpdateAnimation();
+			}
+#endif
+
+			CGameObject *GO = smart_cast<CGameObject *>(object);
+			if (GO)
+			{
+				this->callback(GameObject::eAttachVehicle)(GO->lua_game_object());
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
+void CActor::detach_Vehicle(bool bForce)
+{
+	if (!m_holder)
+		return;
+
+	if (bForce || !m_holder->ExitLocked())
+	{
+		CGameObject *GO = smart_cast<CGameObject *>(m_holder);
+		CPhysicsShellHolder *pholder = smart_cast<CPhysicsShellHolder *>(GO);
+		if (pholder)
+		{
+			pholder->PPhysicsShell()->SplitterHolderDeactivate();
+			if (!character_physics_support()->movement()->ActivateBoxDynamic(0))
+			{
+				pholder->PPhysicsShell()->SplitterHolderActivate();
+				return;
+			}
+			pholder->PPhysicsShell()->SplitterHolderActivate();
+		}
+
+		SetWeaponHideState(INV_STATE_BLOCK_ALL, false);
+		inventory().SetActiveSlot(inventory().GetPrevActiveSlot());
+		inventory().SetPrevActiveSlot(NO_ACTIVE_SLOT);
+
+		character_physics_support()->movement()->CreateCharacter();
+
+		CCar *car = smart_cast<CCar *>(m_holder);
+#ifdef CAR_NEW
+		if (car && car->IsRemoteControl() == false)
+#endif
+		{
+			character_physics_support()->movement()->SetPosition(m_holder->ExitPosition());
+			character_physics_support()->movement()->SetVelocity(m_holder->ExitVelocity());
+			cam_Active()->Direction().set(Fvector().setHP(GO->Direction().getH(), 0.0F));
+		}
+
+		m_holder->detach_Actor();
+		m_holder = NULL;
+		m_holderID = u16(-1);
+
+		SetCallbacks();
+		IKinematicsAnimated *V = smart_cast<IKinematicsAnimated *>(Visual());
+		R_ASSERT(V);
+		V->PlayCycle(m_anims->m_normal.legs_idle);
+		V->PlayCycle(m_anims->m_normal.m_torso_idle);
+
+		if (GO)
+		{
+			this->callback(GameObject::eDetachVehicle)(GO->lua_game_object());
+		}
+	}
+}
+#else
 bool CActor::use_HolderEx(CHolderCustom* object, bool bForce)
 {
 	if (m_holder)
@@ -1550,12 +1714,16 @@ bool CActor::use_HolderEx(CHolderCustom* object, bool bForce)
 	}
 	return false;
 }
+#endif
 
 void CActor::on_requested_spawn(CObject *object)
 {
 	CHolderCustom* oHolder = smart_cast<CHolderCustom*>(object);
 	if (!oHolder) return;
 
+#ifdef HOLDERCUSTOM_NEW
+	use_HolderEx(oHolder, true);
+#else
 	CGameObject* go = smart_cast<CGameObject*>(object);
 	CPhysicsShellHolder* pholder = smart_cast<CPhysicsShellHolder*>(go);
 	if (pholder)
@@ -1581,6 +1749,7 @@ void CActor::on_requested_spawn(CObject *object)
 	Fvector xyz;
 	object->XFORM().getXYZi(xyz);
 	r_torso.yaw = xyz.y;
+#endif
 }
 
 float NET_Jump = 0;
@@ -1837,7 +2006,7 @@ void CActor::shedule_Update(u32 DT)
 		setVisible(TRUE);
 
 	//÷òî àêòåð âèäèò ïåðåä ñîáîé
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
+	collide::rq_result& RQ = HUD().GetRQ();
 
 
 	if (!input_external_handler_installed() && RQ.O && RQ.O->getVisible() && RQ.range < 2.0f)
@@ -1859,7 +2028,7 @@ void CActor::shedule_Update(u32 DT)
 			}
 			else
 			{
-				if (m_pPersonWeLookingAt && pEntityAlive->g_Alive() && m_pPersonWeLookingAt->IsTalkEnabled())
+				if (m_pPersonWeLookingAt && pEntityAlive && pEntityAlive->g_Alive() && m_pPersonWeLookingAt->IsTalkEnabled())
 				{
 					m_sDefaultObjAction = m_sCharacterUseAction;
 				}
@@ -1932,14 +2101,12 @@ void CActor::RenderCamAttached()
 			Fmatrix cam = Fidentity;
 			Cameras().camera_Matrix(cam);
 
-			xr_map<u16, script_attachment*>::iterator it = GetAttachments()->begin();
-			xr_map<u16, script_attachment*>::iterator it_e = GetAttachments()->end();
-			for (; it != it_e; ++it)
+			for (auto& pair : m_script_attachments)
 			{
-				script_attachment* att = (*it).second;
+				script_attachment* att = pair.second;
 
-				if (att->GetFFlags().test(eSA_CamAttached))
-					att->Render(nullptr, &cam, true);
+				if (att->GetType() == eSA_CamAttached)
+					att->Render(nullptr, &cam);
 			}
 
 			::Render->set_CamAttached(FALSE);
@@ -2379,18 +2546,18 @@ void CActor::UpdateArtefactsOnBeltAndOutfit()
 
 float CActor::HitArtefactsOnBelt(float hit_power, ALife::EHitType hit_type)
 {
-	luabind::functor<luabind::object> funct;
+	::luabind::functor<::luabind::object> funct;
 	if (ai().script_engine().functor("_G.CActor__HitArtefactsOnBelt", funct))
 	{
-		luabind::object table = luabind::newtable(ai().script_engine().lua());
+		::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 		table["override"] = false;
 		table["hit_power"] = hit_power;
 
-		luabind::object output = funct(table, hit_power, hit_type);
+		::luabind::object output = funct(table, hit_power, hit_type);
 		if (output && output.type() == LUA_TTABLE)
 		{
-			if (luabind::object_cast<bool>(output["override"]))
-				return luabind::object_cast<float>(output["hit_power"]);
+			if (::luabind::object_cast<bool>(output["override"]))
+				return ::luabind::object_cast<float>(output["hit_power"]);
 		}
 	}
 

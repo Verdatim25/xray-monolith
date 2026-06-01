@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////
-// script_game_object_inventory_owner.сpp :	функции для inventory owner
+// script_game_object_inventory_owner.СЃpp :	С„СѓРЅРєС†РёРё РґР»СЏ inventory owner
 //////////////////////////////////////////////////////////////////////////
 
 #include "pch_script.h"
@@ -60,7 +60,7 @@
 #include "ai_space.h"
 #include "ActorBackpack.h"
 
-//using namespace luabind;
+//
 //-Alundaio
 
 #include "Flashlight.h"
@@ -226,7 +226,7 @@ bool CScriptGameObject::IsInvUpgradeEnabled()
 	return pInventoryOwner->IsInvUpgradeEnabled();
 }
 
-void CScriptGameObject::ForEachInventoryItems(const luabind::functor<bool>& functor)
+void CScriptGameObject::ForEachInventoryItems(const ::luabind::functor<bool>& functor)
 {
 	CInventoryOwner* owner = smart_cast<CInventoryOwner*>(&object());
 	if (!owner)
@@ -253,7 +253,7 @@ void CScriptGameObject::ForEachInventoryItems(const luabind::functor<bool>& func
 }
 
 //1
-void CScriptGameObject::IterateInventory(luabind::functor<bool> functor, luabind::object object)
+void CScriptGameObject::IterateInventory(::luabind::functor<bool> functor, ::luabind::object object)
 {
 	CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&this->object());
 	if (!inventory_owner)
@@ -270,7 +270,7 @@ void CScriptGameObject::IterateInventory(luabind::functor<bool> functor, luabind
 			return;
 }
 
-void CScriptGameObject::IterateRuck(luabind::functor<bool> functor, luabind::object object)
+void CScriptGameObject::IterateRuck(::luabind::functor<bool> functor, ::luabind::object object)
 {
 	CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&this->object());
 	if (!inventory_owner)
@@ -287,7 +287,7 @@ void CScriptGameObject::IterateRuck(luabind::functor<bool> functor, luabind::obj
 			return;
 }
 
-void CScriptGameObject::IterateBelt(luabind::functor<bool> functor, luabind::object object)
+void CScriptGameObject::IterateBelt(::luabind::functor<bool> functor, ::luabind::object object)
 {
 	CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&this->object());
 	if (!inventory_owner)
@@ -304,7 +304,7 @@ void CScriptGameObject::IterateBelt(luabind::functor<bool> functor, luabind::obj
 			return;
 }
 
-void CScriptGameObject::IterateInventoryBox(luabind::functor<bool> functor, luabind::object object)
+void CScriptGameObject::IterateInventoryBox(::luabind::functor<bool> functor, ::luabind::object object)
 {
 	CInventoryBox* inventory_box = smart_cast<CInventoryBox*>(&this->object());
 	if (!inventory_box)
@@ -369,6 +369,15 @@ bool CScriptGameObject::MarkedDropped(CScriptGameObject* item)
 
 void CScriptGameObject::UnloadMagazine(bool bKeepAmmo)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		stm->UnloadMagazine(bKeepAmmo);
+		return;
+	}
+#endif
+
 	CWeaponMagazined* weapon_magazined = smart_cast<CWeaponMagazined*>(&object());
 	if (!weapon_magazined)
 	{
@@ -386,6 +395,14 @@ void CScriptGameObject::UnloadMagazine(bool bKeepAmmo)
 
 void CScriptGameObject::ForceUnloadMagazine(bool bKeepAmmo)
 {
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(&object());
+	if (stm)
+	{
+		return stm->UnloadMagazine(bKeepAmmo);
+	}
+#endif
+
 	CWeaponMagazined* weapon_magazined = smart_cast<CWeaponMagazined*>(&object());
 	if (!weapon_magazined)
 	{
@@ -580,7 +597,7 @@ void CScriptGameObject::ItemDenyTrade(CScriptGameObject* pItem)
 	item->DenyTrade();
 }
 
-//передаче вещи из своего инвентаря в инвентарь партнера
+//РїРµСЂРµРґР°С‡Рµ РІРµС‰Рё РёР· СЃРІРѕРµРіРѕ РёРЅРІРµРЅС‚Р°СЂСЏ РІ РёРЅРІРµРЅС‚Р°СЂСЊ РїР°СЂС‚РЅРµСЂР°
 void CScriptGameObject::TransferItem(CScriptGameObject* pItem, CScriptGameObject* pForWho)
 {
 	if (!pItem || !pForWho)
@@ -597,13 +614,13 @@ void CScriptGameObject::TransferItem(CScriptGameObject* pItem, CScriptGameObject
 		return;
 	}
 
-	// выбросить у себя
+	// РІС‹Р±СЂРѕСЃРёС‚СЊ Сѓ СЃРµР±СЏ
 	NET_Packet P;
 	CGameObject::u_EventGen(P, GE_TRADE_SELL, object().ID());
 	P.w_u16(pIItem->object().ID());
 	CGameObject::u_EventSend(P);
 
-	// отдать партнеру
+	// РѕС‚РґР°С‚СЊ РїР°СЂС‚РЅРµСЂСѓ
 	CGameObject::u_EventGen(P, GE_TRADE_BUY, pForWho->object().ID());
 	P.w_u16(pIItem->object().ID());
 	CGameObject::u_EventSend(P);
@@ -902,11 +919,11 @@ int CScriptGameObject::CharacterRank()
 	return monster->Rank();
 }
 
-luabind::object CScriptGameObject::CharacterDialogs()
+::luabind::object CScriptGameObject::CharacterDialogs()
 {
 	CInventoryOwner* pInventoryOwner = smart_cast<CInventoryOwner*>(&object());
 
-	luabind::object table = luabind::newtable(ai().script_engine().lua());
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 
 	if (!pInventoryOwner)
 	{
@@ -1064,7 +1081,7 @@ void CScriptGameObject::SwitchToTrade()
 	CActor* pActor = smart_cast<CActor*>(&object());
 	if (!pActor) return;
 
-	//только если находимся в режиме single
+	//С‚РѕР»СЊРєРѕ РµСЃР»Рё РЅР°С…РѕРґРёРјСЃСЏ РІ СЂРµР¶РёРјРµ single
 	CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
 	if (!pGameSP) return;
 
@@ -1079,7 +1096,7 @@ void CScriptGameObject::SwitchToUpgrade()
 	CActor* pActor = smart_cast<CActor*>(&object());
 	if (!pActor) return;
 
-	//только если находимся в режиме single
+	//С‚РѕР»СЊРєРѕ РµСЃР»Рё РЅР°С…РѕРґРёРјСЃСЏ РІ СЂРµР¶РёРјРµ single
 	CUIGameSP* pGameSP = smart_cast<CUIGameSP*>(CurrentGameUI());
 	if (!pGameSP) return;
 
@@ -2198,7 +2215,7 @@ bool CScriptGameObject::HasUpgrade(LPCSTR upgrade)
 	return item->has_upgrade(upgrade);
 }
 
-void CScriptGameObject::IterateInstalledUpgrades(const luabind::functor<bool>& functor)
+void CScriptGameObject::IterateInstalledUpgrades(const ::luabind::functor<bool>& functor)
 {
 	CInventoryItem* Item = smart_cast<CInventoryItem*>(&object());
 	if (!Item)
@@ -2295,7 +2312,7 @@ void CScriptGameObject::SetActorMaxWeight(float max_weight)
 	pActor->inventory().SetMaxWeight(max_weight);
 }
 
-// получить и задать максимальный вес при котором можно ходить
+// РїРѕР»СѓС‡РёС‚СЊ Рё Р·Р°РґР°С‚СЊ РјР°РєСЃРёРјР°Р»СЊРЅС‹Р№ РІРµСЃ РїСЂРё РєРѕС‚РѕСЂРѕРј РјРѕР¶РЅРѕ С…РѕРґРёС‚СЊ
 float CScriptGameObject::GetActorMaxWalkWeight() const
 {
 	CActor* pActor = smart_cast<CActor*>(&object());
@@ -2321,7 +2338,7 @@ void CScriptGameObject::SetActorMaxWalkWeight(float max_walk_weight)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-// получить и задать доп. вес для костюма
+// РїРѕР»СѓС‡РёС‚СЊ Рё Р·Р°РґР°С‚СЊ РґРѕРї. РІРµСЃ РґР»СЏ РєРѕСЃС‚СЋРјР°
 float CScriptGameObject::GetAdditionalMaxWeight() const
 {
 	CCustomOutfit* outfit = smart_cast<CCustomOutfit*>(&object());
@@ -2391,7 +2408,7 @@ void CScriptGameObject::SetAdditionalMaxWalkWeight(float add_max_walk_weight)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-// получить суммарный вес инвентаря
+// РїРѕР»СѓС‡РёС‚СЊ СЃСѓРјРјР°СЂРЅС‹Р№ РІРµСЃ РёРЅРІРµРЅС‚Р°СЂСЏ
 float CScriptGameObject::GetTotalWeight() const
 {
 	CInventoryOwner* inventory_owner = smart_cast<CInventoryOwner*>(&object());
@@ -2430,7 +2447,7 @@ float CScriptGameObject::GetTotalWeightForceUpdate() const
 	return (inventory_owner->inventory().TotalWeight());
 }
 
-// получить вес предмета
+// РїРѕР»СѓС‡РёС‚СЊ РІРµСЃ РїСЂРµРґРјРµС‚Р°
 float CScriptGameObject::Weight() const
 {
 	CInventoryItem* inventory_item = smart_cast<CInventoryItem*>(&object());

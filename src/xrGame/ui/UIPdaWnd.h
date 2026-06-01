@@ -39,9 +39,11 @@ protected:
 	//	CUIAnimatedStatic*		m_anim_static;
 	CUITextWnd* m_clock;
 
-	// Текущий активный диалог
+	// РўРµРєСѓС‰РёР№ Р°РєС‚РёРІРЅС‹Р№ РґРёР°Р»РѕРі
 	CUIWindow* m_pActiveDialog;
 	shared_str m_sActiveSection;
+
+	shared_str g_pda_xml_path;
 
 	UIHint* m_hint_wnd;
 
@@ -88,6 +90,8 @@ public:
 	void SetActiveDialog(CUIWindow* pUI) { m_pActiveDialog = pUI; };
 	CUIWindow* GetActiveDialog() { return m_pActiveDialog; };
 	LPCSTR GetActiveSection() { return m_sActiveSection.c_str(); };
+	LPCSTR GetPdaXml() { return g_pda_xml_path.c_str(); }
+	void SetPdaXml(LPCSTR xml);
 	CUITabControl* GetTabControl() { return UITabControl; };
 
 	void SetActiveSubdialog(const shared_str& section);

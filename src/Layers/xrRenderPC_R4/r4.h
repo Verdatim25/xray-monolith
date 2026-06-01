@@ -70,6 +70,11 @@ public:
 		u32 ssfx_core : 1;
 		u32 ssfx_bloom : 1;
 		u32 ssfx_sss : 1;
+		u32 ssfx_fog : 1;
+		u32 ssfx_motionblur : 1;
+		u32 ssfx_taa : 1;
+		u32 ssfx_motionvectors : 1;
+		u32 ssfx_glass : 1;
 
 		u32 bug : 1;
 
@@ -169,11 +174,12 @@ public:
 	CModelPool* Models;
 	CWallmarksEngine* Wallmarks;
 
-	CRenderTarget* Target; // Render-target
+	CRenderTarget* Target; // Active Render-target
+	CRenderTarget* TargetMain;
+	CRenderTarget* TargetSVP;
 
 	CLight_DB Lights;
 	CLight_Compute_XFORM_and_VIS LR;
-	xr_vector<light*> Lights_LastFrame;
 	SMAP_Allocator LP_smap_pool;
 	light_Package LP_normal;
 	light_Package LP_pending;
@@ -211,19 +217,25 @@ public:
 	IRender_Sector* rimp_detectSector(Fvector& P, Fvector& D);
 	void render_main(Fmatrix& mCombined, bool _fportals);
 	void render_forward();
-	void render_Reticle();
 	void render_smap_direct(Fmatrix& mCombined);
 	void render_indirect(light* L);
+	void render_lights_shadowmaps(light_Package& LP);
 	void render_lights(light_Package& LP);
 	void render_sun();
 	void render_sun_near();
 	void render_sun_filtered();
 	void render_menu();
+	bool is_raining();
+	void shadowmap_rain();
 	void render_rain();
 
 	void render_sun_cascade(u32 cascade_ind);
 	void init_cacades();
+	void shadowmap_sun_cascades();
 	void render_sun_cascades();
+
+	void shadowmap_sun_cascade(u32 cascade_ind);
+	void shadowmap_sun_cascades(u32 cascade_ind);
 
 public:
 	ShaderElement* rimp_select_sh_static(dxRender_Visual* pVisual, float cdist_sq);
@@ -241,6 +253,7 @@ public:
 	// HW-occlusion culling
 	IC u32 occq_begin(u32& ID) { return HWOCC.occq_begin(ID); }
 	IC void occq_end(u32& ID) { HWOCC.occq_end(ID); }
+	IC R_occlusion::occq_try_result occq_try_get(u32 ID) { return HWOCC.occq_try_get(ID); }
 	IC R_occlusion::occq_result occq_get(u32& ID) { return HWOCC.occq_get(ID); }
 
 	ICF void apply_object(IRenderable* O)
@@ -298,6 +311,8 @@ public:
 	// Loading / Unloading
 	virtual void create();
 	virtual void destroy();
+	void initializeTargets();
+	void deleteTargets();
 	virtual void reset_begin();
 	virtual void reset_end();
 
@@ -367,8 +382,39 @@ public:
 	virtual void model_Delete(IRender_DetailModel* & F);
 	virtual void model_Logging(BOOL bEnable) { Models->Logging(bEnable); }
 	virtual void models_Prefetch();
-	virtual void models_PrefetchOne(LPCSTR name);
+	virtual void models_PrefetchOne(LPCSTR name, bool assert = true);
 	virtual void models_Clear(BOOL b_complete);
+	virtual bool models_Exists(LPCSTR name);
+	
+	// anglobes: Sun Values
+	virtual Fvector GetSunPosition()
+	{
+		static Fvector default_pos = { 0, 0, 0 };
+		light* sun = (light*)Lights.sun_adapted._get();
+		if (!sun)
+			return default_pos;
+		return sun->position;
+	};
+	virtual Fcolor GetSunColor()
+	{
+		static Fcolor default_color = { 0.0f, 0.0f, 0.0f, 0.0f };
+		light* sun = (light*)Lights.sun_adapted._get();
+		if (!sun)
+			return default_color;
+		return sun->color;
+	};
+	virtual float GetSunIntensity()
+	{
+		static float default_intensity = 0.0f;
+		light* sun = (light*)Lights.sun_adapted._get();
+		if (!sun)
+			return default_intensity;
+		return sun->color.intensity();
+	};
+	virtual bool IsSun()
+	{
+		return is_sun();
+	};
 
 	// Occlusion culling
 	virtual BOOL occ_visible(vis_data& V);
@@ -376,7 +422,13 @@ public:
 	virtual BOOL occ_visible(sPoly& P);
 
 	// Main
+	void SetMatrices(Fmatrix view, Fmatrix projection, Fmatrix projection_hud);
 	virtual void Calculate();
+	void renderGBuffer();
+	void combineLightingAndBloom();
+	void renderSun();
+	void renderShadowmaps();
+	void combineGBuffer();
 	virtual void Render();
 	virtual void Screenshot(ScreenshotMode mode = SM_NORMAL, LPCSTR name = 0);
 	virtual void Screenshot(ScreenshotMode mode, CMemoryWriter& memory_writer);

@@ -52,6 +52,7 @@
 #include "script_ini_file.h"
 #include "EffectorBobbing.h"
 #include "LevelDebugScript.h"
+#include "script_attachment_manager.h"
 
 #include "ui\UIPdaMsgListItem.h"
 #include "ui\UILogsWnd.h"
@@ -137,7 +138,7 @@ CScriptGameObject* get_object_by_id()
 	return nullptr;
 }
 
-CScriptGameObject* get_object_by_id(const luabind::object& ob)
+CScriptGameObject* get_object_by_id(const ::luabind::object& ob)
 {
 	if (!ob || ob.type() == LUA_TNIL)
 	{
@@ -146,7 +147,7 @@ CScriptGameObject* get_object_by_id(const luabind::object& ob)
 		return nullptr;
 	}
 
-	u16 id = luabind::object_cast<u16>(ob);
+	u16 id = ::luabind::object_cast<u16>(ob);
 	return get_object_by_id(id);
 }
 
@@ -200,6 +201,27 @@ float get_wfx_time()
 void stop_weather_fx()
 {
 	g_pGamePersistent->Environment().StopWFX();
+}
+
+Fvector get_sun_pos()
+{
+	return Render->GetSunPosition();
+}
+
+Fcolor get_sun_color()
+{
+	return Render->GetSunColor();
+}
+
+float get_sun_intensity()
+{
+	return Render->GetSunIntensity();
+}
+
+bool is_sun_visible()
+{
+	//return Render().RImplementation->is_sun();
+	return Render->IsSun();
 }
 
 void set_time_factor(float time_factor)
@@ -404,16 +426,16 @@ CUIStatic* map_get_minimap_spot_static(u16 id, LPCSTR spot_type)
 	return map_spot_static;
 }
 
-luabind::object map_get_object_spots_by_id(u16 id)
+::luabind::object map_get_object_spots_by_id(u16 id)
 {
-	luabind::object table = luabind::newtable(ai().script_engine().lua());
+	::luabind::object table = ::luabind::newtable(ai().script_engine().lua());
 
 	auto result = xr_vector<CMapLocation*>();
 	Level().MapManager().GetMapLocations(id, result);
 
 	int i = 1;
 	for (CMapLocation* ml : result) {
-		luabind::object spot = luabind::newtable(ai().script_engine().lua());
+		::luabind::object spot = ::luabind::newtable(ai().script_engine().lua());
 		spot["spot_type"] = ml->spot_type;
 		spot["text"] = ml->GetHint();
 
@@ -513,29 +535,29 @@ bool is_level_present()
 	return (!!g_pGameLevel);
 }
 
-void add_call(const luabind::functor<bool>& condition, const luabind::functor<void>& action)
+void add_call(const ::luabind::functor<bool>& condition, const ::luabind::functor<void>& action)
 {
-	luabind::functor<bool> _condition = condition;
-	luabind::functor<void> _action = action;
+	::luabind::functor<bool> _condition = condition;
+	::luabind::functor<void> _action = action;
 	CPHScriptCondition* c = xr_new<CPHScriptCondition>(_condition);
 	CPHScriptAction* a = xr_new<CPHScriptAction>(_action);
 	Level().ph_commander_scripts().add_call(c, a);
 }
 
-void remove_call(const luabind::functor<bool>& condition, const luabind::functor<void>& action)
+void remove_call(const ::luabind::functor<bool>& condition, const ::luabind::functor<void>& action)
 {
 	CPHScriptCondition c(condition);
 	CPHScriptAction a(action);
 	Level().ph_commander_scripts().remove_call(&c, &a);
 }
 
-void add_call(const luabind::object& lua_object, LPCSTR condition, LPCSTR action)
+void add_call(const ::luabind::object& lua_object, LPCSTR condition, LPCSTR action)
 {
 	//	try{	
 	//		CPHScriptObjectCondition	*c=xr_new<CPHScriptObjectCondition>(lua_object,condition);
 	//		CPHScriptObjectAction		*a=xr_new<CPHScriptObjectAction>(lua_object,action);
-	luabind::functor<bool> _condition = object_cast<luabind::functor<bool>>(lua_object[condition]);
-	luabind::functor<void> _action = object_cast<luabind::functor<void>>(lua_object[action]);
+	::luabind::functor<bool> _condition = object_cast<::luabind::functor<bool>>(lua_object[condition]);
+	::luabind::functor<void> _action = object_cast<::luabind::functor<void>>(lua_object[action]);
 	CPHScriptObjectConditionN* c = xr_new<CPHScriptObjectConditionN>(lua_object, _condition);
 	CPHScriptObjectActionN* a = xr_new<CPHScriptObjectActionN>(lua_object, _action);
 	Level().ph_commander_scripts().add_call_unique(c, c, a, a);
@@ -546,30 +568,30 @@ void add_call(const luabind::object& lua_object, LPCSTR condition, LPCSTR action
 	//	}
 }
 
-void remove_call(const luabind::object& lua_object, LPCSTR condition, LPCSTR action)
+void remove_call(const ::luabind::object& lua_object, LPCSTR condition, LPCSTR action)
 {
 	CPHScriptObjectCondition c(lua_object, condition);
 	CPHScriptObjectAction a(lua_object, action);
 	Level().ph_commander_scripts().remove_call(&c, &a);
 }
 
-void add_call(const luabind::object& lua_object, const luabind::functor<bool>& condition,
-              const luabind::functor<void>& action)
+void add_call(const ::luabind::object& lua_object, const ::luabind::functor<bool>& condition,
+              const ::luabind::functor<void>& action)
 {
 	CPHScriptObjectConditionN* c = xr_new<CPHScriptObjectConditionN>(lua_object, condition);
 	CPHScriptObjectActionN* a = xr_new<CPHScriptObjectActionN>(lua_object, action);
 	Level().ph_commander_scripts().add_call(c, a);
 }
 
-void remove_call(const luabind::object& lua_object, const luabind::functor<bool>& condition,
-                 const luabind::functor<void>& action)
+void remove_call(const ::luabind::object& lua_object, const ::luabind::functor<bool>& condition,
+                 const ::luabind::functor<void>& action)
 {
 	CPHScriptObjectConditionN c(lua_object, condition);
 	CPHScriptObjectActionN a(lua_object, action);
 	Level().ph_commander_scripts().remove_call(&c, &a);
 }
 
-void remove_calls_for_object(const luabind::object& lua_object)
+void remove_calls_for_object(const ::luabind::object& lua_object)
 {
 	CPHSriptReqObjComparer c(lua_object);
 	Level().ph_commander_scripts().remove_calls(&c);
@@ -640,14 +662,14 @@ void iterate_sounds(LPCSTR prefix, u32 max_count, const CScriptCallbackEx<void>&
 	}
 }
 
-void iterate_sounds1(LPCSTR prefix, u32 max_count, luabind::functor<void> functor)
+void iterate_sounds1(LPCSTR prefix, u32 max_count, ::luabind::functor<void> functor)
 {
 	CScriptCallbackEx<void> temp;
 	temp.set(functor);
 	iterate_sounds(prefix, max_count, temp);
 }
 
-void iterate_sounds2(LPCSTR prefix, u32 max_count, luabind::object object, luabind::functor<void> functor)
+void iterate_sounds2(LPCSTR prefix, u32 max_count, ::luabind::object object, ::luabind::functor<void> functor)
 {
 	CScriptCallbackEx<void> temp;
 	temp.set(functor, object);
@@ -720,7 +742,7 @@ float add_cam_effector(LPCSTR fn, int id, bool cyclic, LPCSTR cb_func, float cam
 // demonized: Get cam effector transform data from "*.anm" file
 #include "../xrEngine/motion.h"
 #include "../xrEngine/envelope.h"
-bool getCamEffectorTransformData(luabind::object& t, LPCSTR animationFile)
+bool getCamEffectorTransformData(::luabind::object& t, LPCSTR animationFile)
 {
 	string_path full_path;
 	if (!FS.exist(full_path, "$level$", animationFile))
@@ -748,10 +770,10 @@ bool getCamEffectorTransformData(luabind::object& t, LPCSTR animationFile)
 					auto k = p.first;
 					auto v = p.second;
 					xr_vector<st_Key*>& keys = M.envs[k]->keys;
-					luabind::object keyData = luabind::newtable(ai().script_engine().lua());
+					::luabind::object keyData = ::luabind::newtable(ai().script_engine().lua());
 					int i = 1;
 					for (KeyIt k_it = keys.begin(); k_it != keys.end(); k_it++) {
-						luabind::object data = luabind::newtable(ai().script_engine().lua());
+						::luabind::object data = ::luabind::newtable(ai().script_engine().lua());
 						data["time"] = (*k_it)->time;
 						data["value"] = (*k_it)->value;
 						data["shape"] = (*k_it)->shape;
@@ -1565,32 +1587,32 @@ void AddBullet(Fvector pos, Fvector dir, float speed, float power, float impulse
 }
 
 // demonized: AddBullet with lua table as argument
-void AddBullet(luabind::object t)
+void AddBullet(::luabind::object t)
 {
 	if (t && t.type() == LUA_TTABLE)
 	{
-		Fvector pos = luabind::object_cast<Fvector>(t["pos"]);
-		Fvector dir = luabind::object_cast<Fvector>(t["dir"]);
-		float speed = luabind::object_cast<float>(t["speed"]);
-		float power = luabind::object_cast<float>(t["power"]);
-		float impulse = luabind::object_cast<float>(t["impulse"]);
-		u16 sender = luabind::object_cast<u16>(t["sender"]);
-		ALife::EHitType hit_type = luabind::object_cast<ALife::EHitType>(t["hit_type"]);
-		float max_dist = luabind::object_cast<float>(t["max_dist"]);
-		LPCSTR ammo_sect = luabind::object_cast<LPCSTR>(t["ammo_sect"]);
-		float air_resistance = luabind::object_cast<float>(t["air_resistance"]);
+		Fvector pos = ::luabind::object_cast<Fvector>(t["pos"]);
+		Fvector dir = ::luabind::object_cast<Fvector>(t["dir"]);
+		float speed = ::luabind::object_cast<float>(t["speed"]);
+		float power = ::luabind::object_cast<float>(t["power"]);
+		float impulse = ::luabind::object_cast<float>(t["impulse"]);
+		u16 sender = ::luabind::object_cast<u16>(t["sender"]);
+		ALife::EHitType hit_type = ::luabind::object_cast<ALife::EHitType>(t["hit_type"]);
+		float max_dist = ::luabind::object_cast<float>(t["max_dist"]);
+		LPCSTR ammo_sect = ::luabind::object_cast<LPCSTR>(t["ammo_sect"]);
+		float air_resistance = ::luabind::object_cast<float>(t["air_resistance"]);
 
 		// momopate: add senderweapon id to the table as to not break most damage mods, defaults to sender
 		u16 senderweapon = sender;
-		if (luabind::object_cast<u16>(t["senderweapon"]))
-			senderweapon = luabind::object_cast<u16>(t["senderweapon"]);
+		if (::luabind::object_cast<u16>(t["senderweapon"]))
+			senderweapon = ::luabind::object_cast<u16>(t["senderweapon"]);
 
 		CCartridge* _temp = xr_new<CCartridge>();
 		_temp->Load(ammo_sect, 0);
 		Level().BulletManager().AddBullet(pos, dir, speed, power, impulse, sender, senderweapon, hit_type, max_dist, *_temp, air_resistance, true);
 		delete_data(_temp);
 	} else {
-		Msg("!AddBullet(luabind::object t): argument is not a table");
+		Msg("!AddBullet(::luabind::object t): argument is not a table");
 		ai().script_engine().print_stack();
 	}
 }
@@ -1633,10 +1655,10 @@ const Fvector2 world2ui(Fvector pos, bool hud = false, bool allow_offscreen = fa
 
 // demonized: unproject ui coordinates (ie mouse cursor coordinates) to world coordinates
 // returns position and underlying object id if found. If there is no object, obj_id will be 65535
-void ui2world(Fvector2 pos, Fvector& res, u16& obj_id)
+void ui2world(Fvector2 pos, bool allow_offscreen, Fvector& res, u16& obj_id)
 {
 	res.set(0, 0, 0);
-	if (pos.x < 0 || pos.x > UI_BASE_WIDTH || pos.y < 0 || pos.y > UI_BASE_HEIGHT) {
+	if (!allow_offscreen && (pos.x < 0 || pos.x > UI_BASE_WIDTH || pos.y < 0 || pos.y > UI_BASE_HEIGHT)) {
 		return;
 	}
 
@@ -1718,9 +1740,24 @@ void ui2world(Fvector2 pos, Fvector& res, u16& obj_id)
 	}
 }
 
+void ui2world(Fvector2 pos, Fvector& res, u16& obj_id)
+{
+	ui2world(pos, false, res, obj_id);
+}
+
 void ui2world(Fvector& pos, Fvector& res, u16& obj_id)
 {
 	ui2world(Fvector2().set(pos.x, pos.y), res, obj_id);
+}
+
+void ui2world_offscreen(Fvector2 pos, Fvector& res, u16& obj_id)
+{
+	ui2world(pos, true, res, obj_id);
+}
+
+void ui2world_offscreen(Fvector& pos, Fvector& res, u16& obj_id)
+{
+	ui2world_offscreen(Fvector2().set(pos.x, pos.y), res, obj_id);
 }
 
 const float get_env_rads()
@@ -1745,57 +1782,128 @@ void spawn_section(LPCSTR sSection, Fvector3 vPosition, u32 LevelVertexID, u16 P
 	Level().spawn_item(sSection, vPosition, LevelVertexID, ParentID, bReturnItem);
 }
 
-//ability to get the target game_object at crosshair
-CScriptGameObject* g_get_target_obj()
+enum ETraceTarget {
+	TT_CAMERA = 0,
+	TT_WEAPON,
+	TT_DEVICE,
+	TT_ACTOR,
+	TT_MAX
+};
+
+static SPickParam* get_pick(ETraceTarget tt)
 {
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
-	if (RQ.O)
+	R_ASSERT(tt >= 0, tt < TT_MAX);
+
+	const attachable_hud_item* item = NULL;
+	switch (tt)
 	{
-		CGameObject* game_object = static_cast<CGameObject*>(RQ.O);
+	case TT_CAMERA:
+		return &HUD().GetPick();
+	case TT_WEAPON:
+		item = g_player_hud->attached_item(0);
+		break;
+	case TT_DEVICE:
+		item = g_player_hud->attached_item(1);
+		break;
+	case TT_ACTOR:
+		return &Actor()->GetPick();
+	}
+
+	if (!item)
+		return (0);
+
+	return &item->m_parent_hud_item->GetPick();
+}
+
+static collide::rq_result* get_rq(ETraceTarget tt)
+{
+	SPickParam* pp = get_pick(tt);
+	if (pp)
+		return &pp->result;
+
+	return NULL;
+}
+
+//ability to get the target game_object at crosshair
+CScriptGameObject* g_get_target_obj(ETraceTarget tt)
+{
+	collide::rq_result* RQ = get_rq(tt);
+	if (RQ && RQ->O)
+	{
+		CGameObject* game_object = static_cast<CGameObject*>(RQ->O);
 		if (game_object)
 			return game_object->lua_game_object();
 	}
 	return (0);
 }
 
+CScriptGameObject* g_get_target_obj()
+{
+	return g_get_target_obj(TT_CAMERA);
+}
+
+float g_get_target_dist(ETraceTarget tt)
+{
+	collide::rq_result* RQ = get_rq(tt);
+	if (RQ && RQ->range)
+		return RQ->range;
+	return (0);
+}
+
 float g_get_target_dist()
 {
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
-	if (RQ.range)
-		return RQ.range;
+	return g_get_target_dist(TT_CAMERA);
+}
+
+u32 g_get_target_element(ETraceTarget tt)
+{
+	collide::rq_result* RQ = get_rq(tt);
+	if (RQ && RQ->element)
+	{
+		return RQ->element;
+	}
 	return (0);
 }
 
 u32 g_get_target_element()
 {
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
-	if (RQ.element)
-	{
-		return RQ.element;
-	}
-	return (0);
+	return g_get_target_element(TT_CAMERA);
 }
 
 // demonized: get world position under crosshair
-Fvector g_get_target_pos()
+Fvector g_get_target_pos(ETraceTarget tt)
 {
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
-	if (RQ.range)
+	SPickParam* pp = get_pick(tt);
+	if (pp)
 	{
-		return Fvector().mad(Device.vCameraPosition, Device.vCameraDirection, RQ.range);
+		CActor* pActor = Actor();
+		Fmatrix mat = pp->barrel_matrix;
+		if (pActor && pActor->HUDview())
+			Device.hud_to_world(mat);
+		return Fvector().mad(mat.c, mat.k, pp->result.range);
 	}
 	return Fvector().set(0, 0, 0);
 }
 
-// demonized: get result of crosshair ray query
-script_rq_result g_get_target_result()
+Fvector g_get_target_pos()
 {
-	collide::rq_result& RQ = HUD().GetCurrentRayQuery();
+	return g_get_target_pos(TT_CAMERA);
+}
+
+// demonized: get result of crosshair ray query
+script_rq_result g_get_target_result(ETraceTarget tt)
+{
+	collide::rq_result* RQ = get_rq(tt);
 	auto script_rq = script_rq_result();
-	if (RQ.range) {
-		script_rq.set(RQ);
+	if (RQ && RQ->range) {
+		script_rq.set(*RQ);
 	}
 	return script_rq;
+}
+
+script_rq_result g_get_target_result()
+{
+	return g_get_target_result(TT_CAMERA);
 }
 
 u8 get_active_cam()
@@ -1887,7 +1995,7 @@ xrTime get_start_time()
 	return (xrTime(Level().GetStartGameTime()));
 }
 
-void iterate_nearest(const Fvector& pos, float radius, const luabind::functor<bool>& functor)
+void iterate_nearest(const Fvector& pos, float radius, const ::luabind::functor<bool>& functor)
 {
 	xr_vector<CObject*> m_nearest;
 	Level().ObjectSpace.GetNearest(m_nearest, pos, radius, NULL);
@@ -1978,28 +2086,41 @@ CScriptIniFile* GetVisualUserdata(LPCSTR visual)
 	return ini;
 }
 
-DBG_ScriptObject* get_object(u16 id)
+DBG_ScriptObject* get_object(LPCSTR s)
 {
-	xr_map<u16, DBG_ScriptObject*>::iterator it = Level().getScriptRenderQueue()->find(id);
+	shared_str id(s);
+	auto it = Level().getScriptRenderQueue()->find(id);
 	if (it == Level().getScriptRenderQueue()->end())
 		return nullptr;
 
 	return it->second;
 }
-
-void remove_object(u16 id)
+DBG_ScriptObject* get_object(u32 id)
 {
-	DBG_ScriptObject* dbg_obj = get_object(id);
+	auto s = std::to_string(id);
+	return get_object(s.c_str());
+}
+
+void remove_object(LPCSTR s)
+{
+	shared_str id(s);
+	DBG_ScriptObject* dbg_obj = get_object(id.c_str());
 	if (!dbg_obj)
 		return;
 
 	xr_delete(dbg_obj);
 	Level().getScriptRenderQueue()->erase(id);
 }
-
-DBG_ScriptObject* add_object(u16 id, DebugRenderType type)
+void remove_object(u32 id)
 {
-	remove_object(id);
+	auto s = std::to_string(id);
+	remove_object(s.c_str());
+}
+
+DBG_ScriptObject* add_object(LPCSTR s, DebugRenderType type)
+{
+	shared_str id(s);
+	remove_object(id.c_str());
 	DBG_ScriptObject* dbg_obj = nullptr;
 
 	switch (type)
@@ -2021,6 +2142,11 @@ DBG_ScriptObject* add_object(u16 id, DebugRenderType type)
 	Level().getScriptRenderQueue()->emplace(mk_pair(id, dbg_obj));
 
 	return dbg_obj;
+}
+DBG_ScriptObject* add_object(u32 id, DebugRenderType type)
+{
+	auto s = std::to_string(id);
+	return add_object(s.c_str(), type);
 }
 
 u32 get_flags()
@@ -2070,6 +2196,34 @@ void update_pda_news_from_uiwindow(CUIWindow* CUIWindowPItem) {
 	}
 }
 
+script_attachment* AddAttachment(LPCSTR name, LPCSTR model_name)
+{
+	script_attachment* att = xr_new<script_attachment>(name, model_name);
+	R_ASSERT(att);
+	att->SetParentLevel();
+	return att;
+}
+
+script_attachment* GetAttachment(LPCSTR name)
+{
+	return Level().get_attachment(name);
+}
+
+void RemoveAttachment(LPCSTR name)
+{
+	Level().remove_attachment(name);
+}
+
+void RemoveAttachment(script_attachment* child)
+{
+	Level().remove_attachment(child);
+}
+
+void IterateAttachments(::luabind::functor<bool> functor)
+{
+	Level().iterate_attachments(functor);
+}
+
 #pragma optimize("s",on)
 
 extern void open_originals_link();
@@ -2113,28 +2267,58 @@ void CLevel::script_register(lua_State* L)
 
 	module(L, "debug_render")
 		[
-			def("add_object", add_object),
-			def("remove_object", remove_object),
-			def("get_object", get_object),
+			def("add_object", ((DBG_ScriptObject * (*)(u32, DebugRenderType)) & add_object)),
+			def("add_object", ((DBG_ScriptObject * (*)(LPCSTR, DebugRenderType)) & add_object)),
+			def("remove_object", ((void (*)(u32)) & remove_object)),
+			def("remove_object", ((void (*)(LPCSTR)) & remove_object)),
+			def("get_object", ((DBG_ScriptObject * (*)(u32)) & get_object)),
+			def("get_object", ((DBG_ScriptObject * (*)(LPCSTR)) & get_object)),
 			def("get_flags", get_flags),
 			def("set_flags", set_flags)
 		];
 
+	module(L)
+		[
+			class_<enum_exporter<ETraceTarget>>("ETraceTarget")
+				.enum_("trace_targets")
+				[
+					value("Actor", int(ETraceTarget::TT_ACTOR)),
+					value("Camera", int(ETraceTarget::TT_CAMERA)),
+					value("Weapon", int(ETraceTarget::TT_WEAPON)),
+					value("Device", int(ETraceTarget::TT_DEVICE))
+				]
+		];
 
 	module(L, "level")
 		[
 			//Alundaio: Extend level namespace exports
 #ifdef NAMESPACE_LEVEL_EXPORTS
 			def("send", &g_send), //allow the ability to send netpacket to level
-			def("get_target_obj", &g_get_target_obj), //intentionally named to what is in xray extensions
-			def("get_target_dist", &g_get_target_dist),
-			def("get_target_element", &g_get_target_element), //Can get bone cursor is targetting
+
+			def("get_target_obj", ((CScriptGameObject * (*)()) & g_get_target_obj)), //intentionally named to what is in xray extensions
+			def("get_target_obj", ((CScriptGameObject* (*)(ETraceTarget)) & g_get_target_obj)), //intentionally named to what is in xray extensions
+
+			def("get_target_dist", ((float (*)()) & g_get_target_dist)),
+			def("get_target_dist", ((float (*)(ETraceTarget)) & g_get_target_dist)),
+
+			def("get_target_element", ((u32 (*)()) & g_get_target_element)), //Can get bone cursor is targetting
+			def("get_target_element", ((u32 (*)(ETraceTarget)) & g_get_target_element)), //Can get bone cursor is targetting
 			
 			// demonized: get world position under crosshair
-			def("get_target_pos", &g_get_target_pos),
+			def("get_target_pos", ((Fvector(*)()) & g_get_target_pos)),
+			def("get_target_pos", ((Fvector (*)(ETraceTarget)) & g_get_target_pos)),
+			// antglobes: Get Sun Position in World Space
+			def("get_sun_pos", ((Fvector(*)()) & get_sun_pos)),
+			// antglobes: Get the float represenation of the sun's color in rgb format
+			def("get_sun_color", ((Fcolor (*)()) & get_sun_color)),
+			// antglobes: Get the sun's brightness
+			def("get_sun_intensity", ((float (*)()) & get_sun_intensity)),
+			// antglobes: Check if the weather is clear
+			def("is_sun_visible", ((bool (*)()) & is_sun_visible)),
 
 			// demonized: get result of crosshair ray query
-			def("get_target_result", &g_get_target_result),
+			def("get_target_result", ((script_rq_result(*)()) & g_get_target_result)),
+			def("get_target_result", ((script_rq_result (*)(ETraceTarget)) & g_get_target_result)),
 
 			def("spawn_item", &spawn_section),
 			def("get_active_cam", &get_active_cam),
@@ -2148,7 +2332,7 @@ void CLevel::script_register(lua_State* L)
 			// demonized: add u16 override for better performance
 			def("object_by_id", ((CScriptGameObject * (*)(u16)) & get_object_by_id)),
 			def("object_by_id", ((CScriptGameObject* (*)()) & get_object_by_id)),
-			def("object_by_id", ((CScriptGameObject* (*)(const luabind::object&)) & get_object_by_id)),
+			def("object_by_id", ((CScriptGameObject* (*)(const ::luabind::object&)) & get_object_by_id)),
 #ifdef DEBUG
 		def("debug_object",						get_object_by_name),
 		def("debug_actor",						tpfGetActor),
@@ -2209,15 +2393,15 @@ void CLevel::script_register(lua_State* L)
 
 			def("show_indicators", show_indicators),
 			def("show_weapon", show_weapon),
-			def("add_call", ((void (*)(const luabind::functor<bool>&, const luabind::functor<void>&))&add_call)),
-			def("add_call", ((void (*)(const luabind::object&, const luabind::functor<bool>&,
-			                           const luabind::functor<void>&))&add_call)),
-			def("add_call", ((void (*)(const luabind::object&, LPCSTR, LPCSTR))&add_call)),
-			def("remove_call", ((void (*)(const luabind::functor<bool>&, const luabind::functor<void>&))&remove_call)),
+			def("add_call", ((void (*)(const ::luabind::functor<bool>&, const ::luabind::functor<void>&))&add_call)),
+			def("add_call", ((void (*)(const ::luabind::object&, const ::luabind::functor<bool>&,
+			                           const ::luabind::functor<void>&))&add_call)),
+			def("add_call", ((void (*)(const ::luabind::object&, LPCSTR, LPCSTR))&add_call)),
+			def("remove_call", ((void (*)(const ::luabind::functor<bool>&, const ::luabind::functor<void>&))&remove_call)),
 			def("remove_call",
-			    ((void (*)(const luabind::object&, const luabind::functor<bool>&, const luabind::functor<void>&))&
+			    ((void (*)(const ::luabind::object&, const ::luabind::functor<bool>&, const ::luabind::functor<void>&))&
 				    remove_call)),
-			def("remove_call", ((void (*)(const luabind::object&, LPCSTR, LPCSTR))&remove_call)),
+			def("remove_call", ((void (*)(const ::luabind::object&, LPCSTR, LPCSTR))&remove_call)),
 			def("remove_calls_for_object", remove_calls_for_object),
 			def("present", is_level_present),
 			def("disable_input", disable_input),
@@ -2273,7 +2457,14 @@ void CLevel::script_register(lua_State* L)
 			def("iterate_nearest", &iterate_nearest),
 			def("pick_material", &PickMaterial),
 			def("add_bullet", ((void (*)(Fvector, Fvector, float, float, float, u16, ALife::EHitType, float, LPCSTR, float))& AddBullet)),
-			def("add_bullet", ((void (*)(luabind::object))& AddBullet))
+			def("add_bullet", ((void (*)(::luabind::object))& AddBullet)),
+
+			// Lucy: Script Attachments
+			def("add_attachment", &AddAttachment),
+			def("get_attachment", &GetAttachment),
+			def("remove_attachment", (void (*)(LPCSTR)) &RemoveAttachment),
+			def("remove_attachment", (void (*)(script_attachment*)) &RemoveAttachment),
+			def("iterate_attachments", &IterateAttachments)
 		],
 
 		module(L, "actor_stats")
@@ -2407,8 +2598,8 @@ void CLevel::script_register(lua_State* L)
 		.def("setHMSms", &xrTime::setHMSms)
 		.def("set", &xrTime::set)
 		.def("get", &xrTime::get,
-		     out_value(_2) + out_value(_3) + out_value(_4) + out_value(_5) + out_value(_6) + out_value(_7) +
-		     out_value(_8))
+		     out_value<2>() + out_value<3>() + out_value<4>() + out_value<5>() + out_value<6>() + out_value<7>() +
+		     out_value<8>())
 		.def("dateToString", &xrTime::dateToString)
 		.def("timeToString", &xrTime::timeToString),
 		// declarations
@@ -2443,8 +2634,10 @@ void CLevel::script_register(lua_State* L)
 		def("prefetch_model", prefetch_model),
 		def("get_visual_userdata", GetVisualUserdata),
 		def("world2ui", world2ui),
-		def("ui2world", (void (*)(Fvector2, Fvector&, u16&))&ui2world, pure_out_value(_2) + pure_out_value(_3)),
-		def("ui2world", (void (*)(Fvector&, Fvector&, u16&))&ui2world, pure_out_value(_2) + pure_out_value(_3)),
+		def("ui2world", (void (*)(Fvector2, Fvector&, u16&))&ui2world, pure_out_value<2>() + pure_out_value<3>()),
+		def("ui2world", (void (*)(Fvector&, Fvector&, u16&))&ui2world, pure_out_value<2>() + pure_out_value<3>()),
+		def("ui2world_offscreen", (void (*)(Fvector2, Fvector&, u16&))& ui2world_offscreen, pure_out_value<2>() + pure_out_value<3>()),
+		def("ui2world_offscreen", (void (*)(Fvector&, Fvector&, u16&))& ui2world_offscreen, pure_out_value<2>() + pure_out_value<3>()),
 		
 		// demonized: adjust game news time
 		def("change_game_news_show_time", &change_game_news_show_time),

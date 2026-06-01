@@ -53,19 +53,17 @@
 #define		r2_jitter_mipped	"$user$jitter_mipped"			// --- dither
 #define		r2_sunmask			"sunmask"
 
-#define		r2_RT_secondVP		"$user$viewport2"		// --#SM+#-- +SecondVP+ O?a�eo ea?oe�e� n� �o�?�a� ��?i�?oa
+#define		r2_RT_secondVP		"$user$viewport2"		// --#SM+#-- +SecondVP+ Рендер-таргет для второго вьюпорта
+#define		r2_RT_reticle		"$user$reticle"
 
 #define		r2_RT_blur_h_2	"$user$blur_h_2"
 #define		r2_RT_blur_2	"$user$blur_2"
-#define 	r2_RT_blur_2_zb "$user$blur_2_zb"
 
 #define		r2_RT_blur_h_4	"$user$blur_h_4"
 #define		r2_RT_blur_4	"$user$blur_4"
-#define 	r2_RT_blur_4_zb "$user$blur_4_zb"
 
 #define		r2_RT_blur_h_8	"$user$blur_h_8"
 #define		r2_RT_blur_8	"$user$blur_8"
-#define     r2_RT_blur_8_zb "$user$blur_8_zb"
 
 #define		r2_RT_pp_bloom	"$user$pp_bloom"
 
@@ -86,7 +84,7 @@
 #define		r2_RT_ssfx_temp2		"$user$ssfx_temp2" // SSS Temp3
 #define		r2_RT_ssfx_temp3		"$user$ssfx_temp3"
 #define		r2_RT_ssfx_accum		"$user$ssfx_accum" // SSS Volumetric
-#define		r2_RT_ssfx_hud			"$user$ssfx_hud" // HUD & Velocity Buffer
+//#define		r2_RT_ssfx_hud			"$user$ssfx_hud" // HUD & Velocity Buffer
 
 #define		r2_RT_ssfx_ssr			"$user$ssfx_ssr" // SSR Acc
 #define		r2_RT_ssfx_water		"$user$ssfx_water" // Water Acc
@@ -116,6 +114,10 @@
 #define		r2_RT_ssfx_bloom_tmp16_2		"$user$ssfx_bloom_tmp16_2" // Bloom
 #define		r2_RT_ssfx_bloom_tmp8_2		"$user$ssfx_bloom_tmp8_2" // Bloom
 #define		r2_RT_ssfx_bloom_tmp4_2		"$user$ssfx_bloom_tmp4_2" // Bloom
+
+#define		r2_RT_ssfx_taa				"$user$ssfx_taa" // TAA
+#define		r2_RT_ssfx_prev_frame		"$user$ssfx_prev_frame" // Prev Frame
+#define		r2_RT_ssfx_motion_vectors	"$user$ssfx_motion_vectors" // Motion vectors
 
 #define		r2_RT_ssfx_prevPos		"$user$ssfx_prev_p" // Prev Position
 

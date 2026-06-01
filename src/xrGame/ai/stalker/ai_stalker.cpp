@@ -51,7 +51,7 @@
 #include "../../visual_memory_manager.h"
 #include "../../enemy_manager.h"
 #include "../../../xrServerEntities/alife_human_brain.h"
-#include "../../profiler.h"
+#include "profiler.h"
 #include "../../BoneProtections.h"
 #include "../../stalker_animation_names.h"
 #include "../../stalker_decision_space.h"
@@ -60,6 +60,7 @@
 #include "smart_cover_animation_selector.h"
 #include "smart_cover_animation_planner.h"
 #include "smart_cover_planner_target_selector.h"
+#include "../../../xrEngine/CameraBase.h"
 
 #ifdef DEBUG
 #	include "../../alife_simulator.h"
@@ -95,6 +96,15 @@ CAI_Stalker::CAI_Stalker() :
 	m_dbg_hud_draw					= false;
 #endif // DEBUG
 	m_registered_in_combat_on_migration = false;
+
+	// LookAtActor feature
+	savedOrientation.set(0.f, 0.f, 0.f);
+	dTimeFSeen = Device.dwTimeGlobal + 1000;
+	dTimeNfSeen = Device.dwTimeGlobal + 1000;
+
+#ifdef HOLDERCUSTOM_NEW
+	m_holder = nullptr;
+#endif
 }
 
 CAI_Stalker::~CAI_Stalker()
@@ -115,7 +125,7 @@ void CAI_Stalker::reinit()
 	animation().reinit();
 	//	movement().reinit				();
 
-	//загрузка спецевической звуковой схемы для сталкера согласно m_SpecificCharacter
+	//Р·Р°РіСЂСѓР·РєР° СЃРїРµС†РµРІРёС‡РµСЃРєРѕР№ Р·РІСѓРєРѕРІРѕР№ СЃС…РµРјС‹ РґР»СЏ СЃС‚Р°Р»РєРµСЂР° СЃРѕРіР»Р°СЃРЅРѕ m_SpecificCharacter
 	sound().sound_prefix(SpecificCharacter().sound_voice_prefix());
 
 #ifdef DEBUG_MEMORY_MANAGER
@@ -381,7 +391,6 @@ void CAI_Stalker::reload(LPCSTR section)
 		m_snp_max_queue_interval_close = READ_IF_EXISTS(pSettings, r_u32, queue_sect, "snp_max_queue_interval_close",
 		                                                4000);
 
-
 		m_mchg_min_queue_size_far = READ_IF_EXISTS(pSettings, r_u32, queue_sect, "mchg_min_queue_size_far", 1);
 		m_mchg_max_queue_size_far = READ_IF_EXISTS(pSettings, r_u32, queue_sect, "mchg_max_queue_size_far", 6);
 		m_mchg_min_queue_interval_far =
@@ -600,8 +609,11 @@ void CAI_Stalker::Die(CObject* who)
 		&& !::Random.randI(0, 2);
 
 	inherited::Die(who);
+#ifdef HOLDERCUSTOM_NEW
+	detach_Holder();
+#endif
 
-	//запретить использование слотов в инвенторе
+	//Р·Р°РїСЂРµС‚РёС‚СЊ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ СЃР»РѕС‚РѕРІ РІ РёРЅРІРµРЅС‚РѕСЂРµ
 	inventory().SetSlotsUseful(false);
 
 	if (inventory().GetActiveSlot() == NO_ACTIVE_SLOT)
@@ -715,7 +727,7 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 	if (!g_Alive())
 		sound().set_sound_mask(u32(eStalkerSoundMaskDie));
 
-	//загрузить иммунитеты из модельки сталкера
+	//Р·Р°РіСЂСѓР·РёС‚СЊ РёРјРјСѓРЅРёС‚РµС‚С‹ РёР· РјРѕРґРµР»СЊРєРё СЃС‚Р°Р»РєРµСЂР°
 	IKinematics* pKinematics = smart_cast<IKinematics*>(Visual());
 	VERIFY(pKinematics);
 	CInifile* ini = pKinematics->LL_UserData();
@@ -734,7 +746,7 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 		}
 	}
 
-	//вычислить иммунета в зависимости от ранга
+	//РІС‹С‡РёСЃР»РёС‚СЊ РёРјРјСѓРЅРµС‚Р° РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂР°РЅРіР°
 	static float novice_rank_immunity = pSettings->r_float("ranks_properties", "immunities_novice_k");
 	static float expirienced_rank_immunity = pSettings->r_float("ranks_properties", "immunities_experienced_k");
 
@@ -786,11 +798,24 @@ BOOL CAI_Stalker::net_Spawn(CSE_Abstract* DC)
 
 	m_pPhysics_support->in_NetSpawn(e);
 
+	// LookAtActor feature
+	{
+		IKinematics* k = smart_cast<IKinematics*>(Visual());
+		if (k)
+		{
+			CBoneInstance* bone_head = &k->LL_GetBoneInstance(k->LL_BoneID("bip01_head"));
+			bone_head->set_callback(bctCustom, BoneCallback, this);
+		}
+	}
+
 	return (TRUE);
 }
 
 void CAI_Stalker::net_Destroy()
 {
+#ifdef HOLDERCUSTOM_NEW
+	detach_Holder();
+#endif
 	inherited::net_Destroy();
 	CInventoryOwner::net_Destroy();
 	m_pPhysics_support->in_NetDestroy();
@@ -937,8 +962,8 @@ void CAI_Stalker::update_object_handler()
 			CObjectHandler::update();
 		}
 #ifdef DEBUG
-		catch (luabind::cast_failed &message) {
-			Msg						("! Expression \"%s\" from luabind::object to %s",message.what(),message.info()->name());
+		catch (::luabind::cast_failed &message) {
+			Msg						("! Expression \"%s\" from ::luabind::object to %s",message.what(),message.info()->name());
 			throw;
 		}
 #endif
@@ -1086,6 +1111,8 @@ CPHDestroyable* CAI_Stalker::ph_destroyable()
 
 #include "../../enemy_manager.h"
 
+BOOL NPCsLookAtActor = TRUE;
+float NPCsLookAtActorMinDistance = 3.5f;
 void CAI_Stalker::shedule_Update(u32 DT)
 {
 	// Optimization update
@@ -1117,6 +1144,14 @@ void CAI_Stalker::shedule_Update(u32 DT)
 			if (g_Alive())
 			{
 				animation().play_delayed_callbacks();
+
+				::luabind::functor<bool> funct;
+				float distance = Actor()->Position().distance_to(Position());
+				auto luaObject = lua_game_object();
+				if (luaObject && distance < NPCsLookAtActorMinDistance && ai().script_engine().functor("_G.CNPCBeforeLookAtActor", funct))
+				{
+					LookAtActorLuaResult = funct(luaObject, distance);
+				}
 
 #ifndef USE_SCHEDULER_IN_AGENT_MANAGER
 				agent_manager().update();
@@ -1252,8 +1287,8 @@ void CAI_Stalker::Think()
 			brain().update(update_delta);
 			//		}
 #ifdef DEBUG
-			//		catch (luabind::cast_failed &message) {
-			//			Msg						("! Expression \"%s\" from luabind::object to %s",message.what(),message.info()->name());
+			//		catch (::luabind::cast_failed &message) {
+			//			Msg						("! Expression \"%s\" from ::luabind::object to %s",message.what(),message.info()->name());
 			//throw;
 			//		}
 #endif
@@ -1283,8 +1318,8 @@ void CAI_Stalker::Think()
 			movement().update(update_delta);
 			//	}
 #if 0//def DEBUG
-	catch (luabind::cast_failed &message) {
-		Msg						("! Expression \"%s\" from luabind::object to %s",message.what(),message.info()->name());
+	catch (::luabind::cast_failed &message) {
+		Msg						("! Expression \"%s\" from ::luabind::object to %s",message.what(),message.info()->name());
 		movement().initialize	();
 		movement().update		(update_delta);
 		throw;
@@ -1597,3 +1632,153 @@ void CAI_Stalker::ChangeVisual(shared_str NewVisual)
 	Visual()->dcast_PKinematics()->CalculateBones_Invalidate();
 	Visual()->dcast_PKinematics()->CalculateBones(TRUE);
 };
+
+void CAI_Stalker::BoneCallback(CBoneInstance* B)
+{
+	CAI_Stalker* self = static_cast<CAI_Stalker*>(B->callback_param());
+	self->LookAtActor(B);
+	
+	if (!_valid(B->mTransform)) {
+		Msg("![CAI_Stalker::BoneCallback] invalid mTransform for %s, section %s, id %d", self->cName().c_str(), self->cNameSect().c_str(), self->ID());
+		R_ASSERT(false);
+	}
+}
+
+void CAI_Stalker::AdjustHeadOrientation(float targetPitch, float targetYaw, float targetRoll)
+{
+	savedOrientation.x = angle_inertion(savedOrientation.x, targetPitch, angle_difference(savedOrientation.x, targetPitch), PI_MUL_2, Device.fTimeDelta);
+	savedOrientation.y = angle_inertion(savedOrientation.y, targetYaw, angle_difference(savedOrientation.y, targetYaw), PI_MUL_2, Device.fTimeDelta);
+	savedOrientation.z = angle_inertion(savedOrientation.z, targetRoll, angle_difference(savedOrientation.z, targetRoll), PI_MUL_2, Device.fTimeDelta);
+};
+
+void CAI_Stalker::LookAtActorSoftReset(CBoneInstance* headBone)
+{
+	AdjustHeadOrientation(0.f, 0.f, 0.f);
+	Fmatrix M;
+	M.setHPB(VPUSH(savedOrientation));
+	headBone->mTransform.mulB_43(M);
+}
+
+void CAI_Stalker::LookAtActor(CBoneInstance* headBone) {
+	if (!g_Alive()) return;
+	if (!Actor()) return;
+	if (wounded()) return;
+
+	// soft reset if cvar is disabled
+	if (!NPCsLookAtActor)
+		return LookAtActorSoftReset(headBone);
+
+	// soft reset if far enough
+	float distance = Actor()->Position().distance_to(Position());
+	if (distance > NPCsLookAtActorMinDistance)
+		return LookAtActorSoftReset(headBone);
+
+	// soft reset if can't see actor
+	if (!memory().visual().visible_right_now(Actor()))
+		return LookAtActorSoftReset(headBone);
+
+	// soft reset if lua callback returned false
+	if (!LookAtActorLuaResult)
+		return LookAtActorSoftReset(headBone);
+
+	Fmatrix actorHead;
+	smart_cast<IKinematics*>(Actor()->Visual())->Bone_GetAnimPos(actorHead, u16(Actor()->m_head), u8(-1), false);
+	actorHead.mulA_43(Actor()->XFORM());
+
+	Fmatrix myHead = headBone->mTransform;
+	myHead.mulA_43(XFORM());
+	myHead.c.mad(myHead.i, .15f);
+
+	Fvector dir, cam_pos = Actor()->HUDview() ? Actor()->cam_FirstEye()->Position() : actorHead.c;
+	dir.sub(cam_pos, myHead.c).normalize();
+
+	Fmatrix target_matrix;
+	target_matrix.identity();
+	target_matrix.k.set(dir);
+	Fvector::generate_orthonormal_basis_normalized(target_matrix.k, target_matrix.i, target_matrix.j);
+	target_matrix.j.invert();
+	target_matrix.mulA_43(Fmatrix(headBone->mTransform).mulA_43(XFORM()).invert());
+
+	float yaw, pitch, roll;
+	target_matrix.getHPB(pitch, yaw, roll);
+
+	clamp(pitch, -0.75f, 0.7f);
+	clamp(yaw, -1.0f, 1.0f);
+	clamp(roll, -0.4f, 0.4f);
+
+	bool inRange = (pitch > -0.7f && pitch < 0.65f) && (yaw > -0.9f && yaw < 0.9f) && (roll > -0.35f && roll < 0.35f);
+	if (inRange && dTimeNfSeen < Device.dwTimeGlobal)
+	{
+		dTimeFSeen = Device.dwTimeGlobal + 1000;
+		AdjustHeadOrientation(pitch, yaw, roll);
+	}
+
+	bool outOfRange = !(pitch > -0.75f && pitch < 0.7f) && !(yaw > -1.2f && yaw < 1.2f) && !(roll > -0.5f && roll < 0.5f);
+	if (outOfRange && dTimeFSeen < Device.dwTimeGlobal)
+	{
+		dTimeNfSeen = Device.dwTimeGlobal + 1000;
+		AdjustHeadOrientation(0.f, 0.f, 0.f);
+	}
+
+	Fmatrix M;
+	M.setHPB(VPUSH(savedOrientation));
+	headBone->mTransform.mulB_43(M);
+}
+
+#ifdef HOLDERCUSTOM_NEW
+bool CAI_Stalker::attach_Holder(CHolderCustom *holder)
+{
+	if (holder == NULL)
+		return false;
+	if (m_holder)
+		return false;
+
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(holder);
+	if (stm)
+	{
+		if (stm->attach_Actor(cast_game_object()))
+		{
+			m_holder = holder;
+
+			animation().clear_script_animations();
+			movement().set_movement_type(eMovementTypeStand);
+			movement().set_mental_state(eMentalStateFree);
+			movement().set_body_state(eBodyStateStand);
+			stm->UpdateAnimation();
+			return true;
+		}
+		return false;
+	}
+#endif
+
+	return false;
+}
+
+void CAI_Stalker::detach_Holder()
+{
+	if (m_holder == nullptr)
+		return;
+
+#ifdef STATIONARYMGUN_NEW
+	CWeaponStatMgun *stm = smart_cast<CWeaponStatMgun *>(m_holder);
+	if (stm)
+	{
+		ForceTransform(Fmatrix().set(XFORM()).translate_over(stm->ExitPosition()));
+	}
+#endif
+
+	m_holder->detach_Actor();
+	m_holder = nullptr;
+}
+
+bool CAI_Stalker::use_HolderEx(CHolderCustom *object)
+{
+	if (object)
+	{
+		return attach_Holder(object);
+	}
+	detach_Holder();
+	return true;
+}
+#endif

@@ -1,11 +1,7 @@
 #ifndef xr_iniH
 #define xr_iniH
 
-#include "fastdelegate.h"
-
-#ifdef USE_ROBINHOOD
-#include "robin_hood.h"
-#endif
+#include <fastdelegate/fastdelegate.h>
 
 // refs
 class CInifile;
@@ -64,11 +60,6 @@ public:
 private:
 	string_path m_file_name;
 	Root DATA;
-
-	// demonized: cache read and written ini values
-	xr_unordered_map<std::string, xr_unordered_map<std::string, shared_str>> m_cache;
-	void cacheValue(LPCSTR S, LPCSTR L, shared_str& V);
-
 	void Load(IReader* F, LPCSTR path
 #ifndef _EDITOR
 	          , allow_include_func_t allow_include_func = NULL
@@ -119,10 +110,10 @@ public:
 
 	CLASS_ID r_clsid(LPCSTR S, LPCSTR L) const;
 	CLASS_ID r_clsid(const shared_str& S, LPCSTR L) const { return r_clsid(*S, L); }
-	LPCSTR r_string(LPCSTR S, LPCSTR L) const; // оставляет кавычки
-	LPCSTR r_string(const shared_str& S, LPCSTR L) const { return r_string(*S, L); } // оставляет кавычки
-	shared_str r_string_wb(LPCSTR S, LPCSTR L) const; // убирает кавычки
-	shared_str r_string_wb(const shared_str& S, LPCSTR L) const { return r_string_wb(*S, L); } // убирает кавычки
+	LPCSTR r_string(LPCSTR S, LPCSTR L) const; // РѕСЃС‚Р°РІР»СЏРµС‚ РєР°РІС‹С‡РєРё
+	LPCSTR r_string(const shared_str& S, LPCSTR L) const { return r_string(*S, L); } // РѕСЃС‚Р°РІР»СЏРµС‚ РєР°РІС‹С‡РєРё
+	shared_str r_string_wb(LPCSTR S, LPCSTR L) const; // СѓР±РёСЂР°РµС‚ РєР°РІС‹С‡РєРё
+	shared_str r_string_wb(const shared_str& S, LPCSTR L) const { return r_string_wb(*S, L); } // СѓР±РёСЂР°РµС‚ РєР°РІС‹С‡РєРё
 	u8 r_u8(LPCSTR S, LPCSTR L) const;
 	u8 r_u8(const shared_str& S, LPCSTR L) const { return r_u8(*S, L); }
 	u16 r_u16(LPCSTR S, LPCSTR L) const;

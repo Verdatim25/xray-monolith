@@ -10,6 +10,8 @@
 #include "../../xrEngine/GameFont.h"
 #include "SkeletonCustom.h"
 
+float wallmark_range_static = 100.f;
+float wallmark_range_skeleton = 50.f;
 
 namespace WallmarksEngine
 {
@@ -317,7 +319,7 @@ void CWallmarksEngine::AddStaticWallmark(CDB::TRI* pTri, const Fvector* pVerts, 
 	ref_shader hShader, float sz, float ttl, bool ignore_opt, float rotation)
 {
 	// optimization cheat: don't allow wallmarks more than 100 m from viewer/actor
-	if (!ignore_opt && contact_point.distance_to_sqr(Device.vCameraPosition) > _sqr(100.f))
+	if (!ignore_opt && contact_point.distance_to_sqr(Device.vCameraPosition) > _sqr(wallmark_range_static))
 		return;
 
 	// Physics may add wallmarks in parallel with rendering
@@ -331,7 +333,7 @@ void CWallmarksEngine::AddSkeletonWallmark(const Fmatrix* xf, CKinematics* obj, 
 {
 	if (::RImplementation.phase != CRender::PHASE_NORMAL) return;
 	// optimization cheat: don't allow wallmarks more than 50 m from viewer/actor
-	if (!ignore_opt && xf->c.distance_to_sqr(Device.vCameraPosition) > _sqr(50.f)) return;
+	if (!ignore_opt && xf->c.distance_to_sqr(Device.vCameraPosition) > _sqr(wallmark_range_skeleton)) return;
 
 	VERIFY(obj&&xf&&(size>EPS_L));
 	lock.Enter();
@@ -393,7 +395,9 @@ void CWallmarksEngine::Render()
 
 	Fmatrix mSavedView = Device.mView;
 	Fvector mViewPos;
-	mViewPos.mad(Device.vCameraPosition, Device.vCameraDirection, ps_r__WallmarkSHIFT_V);
+	Fvector vCameraPosition = Device.mInvView.c; // vCameraPosition may not be correct in SVP frame
+
+	mViewPos.mad(vCameraPosition, Device.vCameraDirection, ps_r__WallmarkSHIFT_V);
 	Device.mView.build_camera_dir(mViewPos, Device.vCameraDirection, Device.vCameraTop);
 	RCache.set_xform_view(Device.mView);
 
@@ -419,7 +423,7 @@ void CWallmarksEngine::Render()
 			if (RImplementation.ViewBase.testSphere_dirty(W->bounds.P, W->bounds.R))
 			{
 				Device.Statistic->RenderDUMP_WMS_Count++;
-				float dst = Device.vCameraPosition.distance_to_sqr(W->bounds.P);
+				float dst = vCameraPosition.distance_to_sqr(W->bounds.P);
 				float ssa = W->bounds.R * W->bounds.R / dst;
 				if (ssa >= ssaCLIP)
 				{

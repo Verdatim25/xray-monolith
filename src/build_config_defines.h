@@ -25,7 +25,7 @@
 #define USE_OWN_MINI_DUMP								// create mini dump on crash
 //#define USE_VERIFY_IN_RELEASE							// use VERIFY macros in release builds
 
-//#define SPAWN_ANTIFREEZE								// spread spawn of game objects thoughout multiple frames to prevent lags (by alpet)
+#define SPAWN_ANTIFREEZE								// spread spawn of game objects thoughout multiple frames to prevent lags (by alpet, MT implementation by demonized)
 #define NON_FATAL_VERIFY								// don't crash game when VERIFY fails
 //#define USE_GSC_MEM_ALLOC								// when this is undefined memory allocation for luajit is handled by luajit allocator
 //-CORE
@@ -42,6 +42,10 @@
 #define NEW_ANIMS										// use new animations. Please enclose any new animation addions with this define
 //-TWEAKS
 
+#define HOLDERCUSTOM_NEW								// Upgrade CHolderCustom.
+#define CAR_NEW                                         // Upgrade CCar.
+#define STATIONARYMGUN_NEW								// Upgrade CSE_ALifeStationaryMgun and CWeaponStatMgun.
+#define SPATIAL_CHANGE									// Upgrade spatial and feel_vision.
 
 /*LAYERED_SND_SHOOT by Alundaio
 When defined, it will allow you to play a group of sounds from a specified section for snd_shoot.

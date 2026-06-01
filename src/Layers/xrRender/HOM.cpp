@@ -20,8 +20,12 @@ void __stdcall CHOM::MT_RENDER()
 	bool b_main_menu_is_active = (g_pGamePersistent->m_pMainMenu && g_pGamePersistent->m_pMainMenu->IsActive());
 	if (MT_frame_rendered != Device.dwFrame && !b_main_menu_is_active)
 	{
+		// Snapshot the device matrices, as SVP may change them during the DB render
+		fullTransform = Device.mFullTransform;
+		cameraPosition = Device.vCameraPosition;
+
 		CFrustum ViewBase;
-		ViewBase.CreateFromMatrix(Device.mFullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
+		ViewBase.CreateFromMatrix(fullTransform, FRUSTUM_P_LRTB + FRUSTUM_P_FAR);
 		Enable();
 		Render(ViewBase);
 	}
@@ -97,30 +101,30 @@ void CHOM::Load()
 
 	// Create RASTER-triangles
 	m_pTris = xr_alloc<occTri>(u32(CL.getTS()));
-
-	tbb::parallel_for(tbb::blocked_range<u32>(0, CL.getTS()), [&](const auto& range)
+	for (u32 it = 0; it < CL.getTS(); it++)
 	{
-		for (u32 it = range.begin(); it != range.end(); ++it)
+		CDB::TRI& clT = CL.getT()[it];
+		occTri& rT = m_pTris[it];
+
+		Fvector& v0 = CL.getV()[clT.verts[0]];
+		Fvector& v1 = CL.getV()[clT.verts[1]];
+		Fvector& v2 = CL.getV()[clT.verts[2]];
+
+		rT.adjacent[0] = (0xffffffff == adjacency[3 * it + 0]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 0]);
+		rT.adjacent[1] = (0xffffffff == adjacency[3 * it + 1]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 1]);
+		rT.adjacent[2] = (0xffffffff == adjacency[3 * it + 2]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 2]);
+		rT.flags = clT.dummy;
+		rT.area = Area(v0, v1, v2);
+
+		if (rT.area < EPS_L)
 		{
-			CDB::TRI& clT = CL.getT()[it];
-			occTri& rT = m_pTris[it];
-			Fvector& v0 = CL.getV()[clT.verts[0]];
-			Fvector& v1 = CL.getV()[clT.verts[1]];
-			Fvector& v2 = CL.getV()[clT.verts[2]];
-			rT.adjacent[0] = (0xffffffff == adjacency[3 * it + 0]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 0]);
-			rT.adjacent[1] = (0xffffffff == adjacency[3 * it + 1]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 1]);
-			rT.adjacent[2] = (0xffffffff == adjacency[3 * it + 2]) ? ((occTri*)(-1)) : (m_pTris + adjacency[3 * it + 2]);
-			rT.flags = clT.dummy;
-			rT.area = Area(v0, v1, v2);
-			if (rT.area < EPS_L)
-			{
-				Msg("! Invalid HOM triangle (%f,%f,%f)-(%f,%f,%f)-(%f,%f,%f)", VPUSH(v0), VPUSH(v1), VPUSH(v2));
-			}
-			rT.plane.build(v0, v1, v2);
-			rT.skip = 0;
-			rT.center.add(v0, v1).add(v2).div(3.f);
+			Msg("! Invalid HOM triangle (%f,%f,%f)-(%f,%f,%f)-(%f,%f,%f)", VPUSH(v0), VPUSH(v1), VPUSH(v2));
 		}
-	});
+
+		rT.plane.build(v0, v1, v2);
+		rT.skip = 0;
+		rT.center.add(v0, v1).add(v2).div(3.f);
+	}
 
 	// Create AABB-tree
 	m_pModel = xr_new<CDB::MODEL>();
@@ -181,8 +185,8 @@ void CHOM::Render_DB(CFrustum& base)
 		0.0f, 0.0f, 1.0f, 0.0f,
 		1.f / 2.f + 0 + 0, 1.f / 2.f + 0 + 0, 0.0f, 1.0f
 	};
-	m_xform.mul(m_viewport, Device.mFullTransform);
-	m_xform_01.mul(m_viewport_01, Device.mFullTransform);
+	m_xform.mul(m_viewport, fullTransform);
+	m_xform_01.mul(m_viewport_01, fullTransform);
 
 	// Query DB
 	xrc.frustum_options(0);
@@ -193,13 +197,13 @@ void CHOM::Render_DB(CFrustum& base)
 	CDB::RESULT* it = xrc.r_begin();
 	CDB::RESULT* end = xrc.r_end();
 
-	Fvector COP = Device.vCameraPosition;
+	Fvector COP = cameraPosition;
 	end = std::remove_if(it, end, pred_fb(m_pTris));
 	std::sort(it, end, pred_fb(m_pTris, COP));
 
 	// Build frustum with near plane only
 	CFrustum clip;
-	clip.CreateFromMatrix(Device.mFullTransform,FRUSTUM_P_NEAR);
+	clip.CreateFromMatrix(fullTransform,FRUSTUM_P_NEAR);
 	sPoly src, dst;
 	u32 _frame = Device.dwFrame;
 #ifdef DEBUG
@@ -316,7 +320,7 @@ IC BOOL _visible(Fbox& B, Fmatrix& m_xform_01)
 BOOL CHOM::visible(Fbox3& B)
 {
 	if (!bEnabled) return TRUE;
-	if (B.contains(Device.vCameraPosition)) return TRUE;
+	if (B.contains(cameraPosition)) return TRUE;
 	return _visible(B, m_xform_01);
 }
 
