@@ -975,6 +975,39 @@
 		function ForceSetZoomType(float)
 
         callbacks (see callbacks_gameobject.script): npc_on_weapon_reload_start, npc_on_weapon_reload_stop -- (npc, wpn), fired on a stalker's weapon entering/leaving the reload state; actor reloads fire actor_on_weapon_reload instead
+    
+        // Additive animations by verdatim
+
+
+        function play_hud_motion_add(LPCSTR M, bool bMixIn, u32 state, float speed, float end, u16 mode)
+        // same as play_hud_motion but acts as an additive animation, returns a table with various information about blend IDs that can be passed to
+        // mode defines which anim gets added, 1 is both, 2 is item only, and 3 is hands only
+        // clear_specific_blends to stop playing the animation started by calling this
+        // table contains this information
+        {
+            table["anim_time"] = returns.anim_time;
+            // right hand blend IDs
+            table["m_model_p0_ID"] = returns.m_model_p0_ID;
+            table["m_model_p2_ID"] = returns.m_model_p2_ID;
+            // left hand blend IDs
+            table["m_model_2_p0_ID"] = returns.m_model_2_p0_ID;
+            table["m_model_2_p1_ID"] = returns.m_model_2_p1_ID;
+            table["m_model_2_p2_ID"] = returns.m_model_2_p2_ID;
+
+            item blend IDs from int 0 to int N, variable amount
+            table[0-N] = returns.Item_BlendID[i]
+        }
+
+        function clear_blends()
+        // clears all additive animations
+
+        function load_motion(const shared_str& sect_name, const shared_str& alias, const shared_str& hand_anim, const shared_str& item_anim)
+        // arguments are the hud section name of the weapon, an alias, like "anm_reload_extra", hand anim name and item anim name (gotten from omf)
+
+        function clear_specific_blends(::luabind::object table)
+        // takes a table as an argument. give the table received from play_hud_motion_add to clear that specific animation
+
+
     }
 
     class CWeaponKnife : CWeapon {

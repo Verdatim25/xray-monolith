@@ -381,6 +381,11 @@ bool CMotionDef::StopAtEnd()
 	return !!(flags & esmStopAtEnd);
 }
 
+bool CMotionDef::IsAddFromBase()
+{
+    return !!(flags & esmUseBaseAdditive);
+}
+
 bool shared_motions::create(shared_str key, IReader* data, vecBones* bones)
 {
 	motions_value* v = g_pMotionsContainer->dock(key, data, bones);
