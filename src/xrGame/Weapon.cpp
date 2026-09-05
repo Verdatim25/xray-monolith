@@ -1854,6 +1854,13 @@ bool CWeapon::IsGrenadeLauncherAttached() const
 		ALife::eAddonPermanent == m_eGrenadeLauncherStatus;
 }
 
+bool CWeapon::IsShotgunAttached() const
+{
+	return (ALife::eAddonAttachable == m_eShotgunStatus &&
+			0 != (m_flagsAddOnState & CSE_ALifeItemWeapon::eWeaponAddonShotgun)) ||
+		ALife::eAddonPermanent == m_eShotgunStatus;
+}
+
 bool CWeapon::IsScopeAttached() const
 {
 	return (ALife::eAddonAttachable == m_eScopeStatus &&

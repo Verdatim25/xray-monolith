@@ -249,14 +249,19 @@ public:
 	bool IsGrenadeLauncherAttached() const;
 	bool IsScopeAttached() const;
 	bool IsSilencerAttached() const;
-
+	bool IsShotgunAttached
 	virtual bool GrenadeLauncherAttachable();
 	virtual bool ScopeAttachable();
 	virtual bool SilencerAttachable();
-
+	virtual bool ShotgunAttachable();
 	ALife::EWeaponAddonStatus get_GrenadeLauncherStatus() const
 	{
 		return m_eGrenadeLauncherStatus;
+	}
+
+	ALife::EWeaponAddonStatus get_ShotgunStatus() const
+	{
+		return m_eShotgunStatus;
 	}
 
 	ALife::EWeaponAddonStatus get_ScopeStatus() const
@@ -306,6 +311,16 @@ public:
 		return m_iGrenadeLauncherX;
 	}
 
+	int GetShotgunLauncherY()
+	{
+		return m_iShotgunY;
+	}
+
+		int GetShotgunLauncherX()
+	{
+		return m_iShotgunX;
+	}
+
 	int GetGrenadeLauncherY()
 	{
 		return m_iGrenadeLauncherY;
@@ -314,6 +329,11 @@ public:
 	const shared_str& GetGrenadeLauncherName() const
 	{
 		return m_sGrenadeLauncherName;
+	}
+
+	const shared_str& GetShotgunName() const
+	{
+		return m_sShotgunName;
 	}
 
 	const shared_str GetScopeName() const
@@ -356,16 +376,18 @@ protected:
 	ALife::EWeaponAddonStatus m_eScopeStatus;
 	ALife::EWeaponAddonStatus m_eSilencerStatus;
 	ALife::EWeaponAddonStatus m_eGrenadeLauncherStatus;
+	ALife::EWeaponAddonStatus m_eShotgunStatus;
 
 
 	shared_str m_sScopeName;
 	shared_str m_sSilencerName;
 	shared_str m_sGrenadeLauncherName;
-
+	shared_str m_sShotgunName
 	//ñìåùåíèå èêîíîâ àïãðåéäîâ â èíâåíòàðå
 	int m_iScopeX, m_iScopeY;
 	int m_iSilencerX, m_iSilencerY;
 	int m_iGrenadeLauncherX, m_iGrenadeLauncherY;
+	int m_iShotgunX, m_iShotgunY
 
 protected:
 
