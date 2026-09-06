@@ -2,6 +2,7 @@
 #include "Scope.h"
 #include "Silencer.h"
 #include "GrenadeLauncher.h"
+#include "underbarrel_shotgun.h"
 
 CScope::CScope()
 {

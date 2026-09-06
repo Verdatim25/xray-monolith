@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "WeaponSSRS.h"
 
 extern BOOL g_launcher_dynamic_range_zoom;
@@ -8,6 +8,7 @@ extern BOOL g_launcher_dynamic_range_zoom;
 #include "../xrphysics/MathUtils.h"
 #include "actor.h"
 #include "GrenadeLauncher.h"
+#include "underbarrel_shotgun.h"
 #include "WeaponMagazined.h"
 #include "pch_script.h"
 #include "ParticlesObject.h"

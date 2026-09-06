@@ -101,6 +101,7 @@
 #	include "scope.h"
 #	include "silencer.h"
 #	include "grenadelauncher.h"
+#	include "underbarrel_shotgun.h"
 
 #	include "bolt.h"
 #	include "medkit.h"
@@ -336,6 +337,8 @@ void CObjectFactory::register_classes()
 	ADD(CScope, CSE_ALifeItem, CLSID_OBJECT_W_SCOPE, "wpn_scope");
 	ADD(CSilencer, CSE_ALifeItem, CLSID_OBJECT_W_SILENCER, "wpn_silencer");
 	ADD(CGrenadeLauncher, CSE_ALifeItem, CLSID_OBJECT_W_GLAUNCHER, "wpn_grenade_launcher");
+    // underbarrel shotgun
+    ADD(CGrenadeLauncher, CSE_ALifeItem, CLSID_OBJECT_W_GLAUNCHER, "wpn_grenade_launcher");
 
 	// Inventory
 #ifndef NO_SINGLE

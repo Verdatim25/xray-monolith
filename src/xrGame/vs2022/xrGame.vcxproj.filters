@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="AI">
@@ -5760,6 +5760,9 @@
     <ClInclude Include="..\GrenadeLauncher.h">
       <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\Addons\GrenadeLauncher</Filter>
     </ClInclude>
+	<ClInclude Include="..\underbarrel_shotgun.h">
+		<Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\Addons\underbarrel_shotgun</Filter>
+	</ClInclude>
     <ClInclude Include="..\CustomRocket.h">
       <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\RocketLauncher</Filter>
     </ClInclude>
@@ -9320,6 +9323,9 @@
     <ClCompile Include="..\GrenadeLauncher.cpp">
       <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\Addons\GrenadeLauncher</Filter>
     </ClCompile>
+	 <ClCompile Include="..\underbarrel_shotgun.cpp">
+		 <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\Addons\underbarrel_shotgun</Filter>
+	 </ClCompile>
     <ClCompile Include="..\CustomRocket.cpp">
       <Filter>Core\Client\Objects\items &amp; weapons\Weapons\Custom Weapon\RocketLauncher</Filter>
     </ClCompile>

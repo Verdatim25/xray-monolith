@@ -43,6 +43,7 @@
 #include "silencer.h"
 #include "torch.h"
 #include "GrenadeLauncher.h"
+#include "underbarrel_shotgun.h"
 #include "searchlight.h"
 //#include "grenade.h"
 #include "eatable_item.h"
