@@ -46,7 +46,7 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 	//maybe repurpose that line for UBSG shooting particle
 	//m_sFlameParticles2 = pSettings->r_string(section, "grenade_flame_particles");
 	//add an ltx parameter to know if mag fed or not
-	m_bUBSGIsMagFed = READ_IF_EXISTS(pSettings, r_bool, section, "ubsg_mag_fed", false)
+	m_bUBSGIsMagFed = READ_IF_EXISTS(pSettings, r_bool, section, "ubsg_mag_fed", false);
 	if (m_eGrenadeLauncherStatus == ALife::eAddonPermanent)
 	{
         // unecessary? no need for launch speed anyway
