@@ -126,4 +126,5 @@ public:
 protected:
 	void ApplyLauncherKoeffs();
 	void ResetLauncherKoeffs();
+
 };
