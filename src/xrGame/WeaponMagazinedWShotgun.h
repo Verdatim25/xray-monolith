@@ -1,10 +1,13 @@
 #pragma once
 #include "weaponmagazined.h"
 
+// include this just in case we want it
+#include "WeaponAutomaticShotgun.h"
+
 //class CWeaponFakeGrenade;
 
-
-class CWeaponMagazinedWShotgun : public CWeaponMagazined
+// this is fine because CWeaponAutomaticShotgun inherits CWeaponMagazined already, it just allows us to have tri-state reloads as well
+class CWeaponMagazinedWShotgun : public CWeaponAutomaticShotgun
 {
 	typedef CWeaponMagazined inherited;
 public:
@@ -121,6 +124,10 @@ public:
 	CCartridge m_DefaultCartridge2;
 	u8 iAmmoElapsed2;
 
+    // ver, ammo variable for ammo capacity of ubsg (not defined before)
+    int iMagazineSizeShotgun;
+
+    // ambigious name but w/e
 	virtual void UpdateShotgunVisibility(bool visibility);
 
 protected:
