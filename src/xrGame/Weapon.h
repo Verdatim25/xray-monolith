@@ -240,7 +240,7 @@ protected:
 	bool m_playFullShotAnim;
 
 	BOOL m_bAutoSpawnAmmo;
-	virtual bool AllowfBore();
+	virtual bool AllowBore();
 public:
 	u8 m_sub_state;
 
