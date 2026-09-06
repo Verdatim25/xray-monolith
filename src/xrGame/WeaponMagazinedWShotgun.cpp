@@ -43,9 +43,10 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 	m_sounds.LoadSound(section, "snd_shoot_shotgun", "sndShotS", true, m_eSoundShot);
 	m_sounds.LoadSound(section, "snd_reload_shotgun", "sndReloadS", true, m_eSoundReload);
 	m_sounds.LoadSound(section, "snd_switch", "sndSwitch", true, m_eSoundReload);
-
-	m_sFlameParticles2 = pSettings->r_string(section, "grenade_flame_particles");
-
+	//maybe repurpose that line for UBSG shooting particle
+	//m_sFlameParticles2 = pSettings->r_string(section, "grenade_flame_particles");
+	//add an ltx parameter to know if mag fed or not
+	m_bUBSGIsMagFed = READ_IF_EXISTS(pSettings, r_bool, section, "ubsg_mag_fed", false)
 	if (m_eGrenadeLauncherStatus == ALife::eAddonPermanent)
 	{
         // unecessary? no need for launch speed anyway
@@ -68,7 +69,6 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 	}
 
 	iMagazineSize2 = iMagazineSize;
-
     iMagazineSizeShotgun = pSettings->r_s32(section, "ammo_mag_size_s");
 }
 
@@ -132,8 +132,8 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 	}
 	return l_res;
 }
-
-void CWeaponMagazinedWShotgun::switch2_Reload()
+//going to try some stuff
+/*void CWeaponMagazinedWShotgun::switch2_Reload()
 {
 	VERIFY(GetState() == eReload);
 	if (m_bShotgunMode)
@@ -145,6 +145,90 @@ void CWeaponMagazinedWShotgun::switch2_Reload()
 	}
 	else
 		inherited::switch2_Reload();
+}*/
+
+void CWeaponMagazinedWShotgun::switch2_Reload()
+{
+	VERIFY(GetState() == eReload);
+	if (m_bShotgunMode)
+	{
+		//if magfed then play single reload
+		if (m_bUBSGIsMagFed)
+		{
+			m_needReload = true;
+			PlaySound("sndReloadS", get_LastFP2());
+			PlayHUDMotion("anm_reload_s", TRUE, this, GetState());
+			SetPending(TRUE);
+		}
+		else
+		{
+			//tri state reload stuff i'm not sure i understand
+			inherited::switch2_StartReload();
+		}
+	}
+	else
+	{
+		inherited::switch2_Reload();
+	}
+}
+//Setting up anim and sound refs for tri state reload for UBSG
+//Maybe change anim and sound names tho
+void CWeaponMagazinedWShotgun::switch2_StartReload()
+{
+    if (m_bShotgunMode)
+    {
+        BeginReloadWasEmpty = !m_magazine.size();
+        PlaySound("sndOpenS", get_LastFP2());
+        VERIFY(GetState() == eReload);
+        ClickInterruptFlag = false; 
+        PlayHUDMotion("anm_reload_w_sg_open", TRUE, this, GetState(), 1.f, 0.f, false);
+        
+        SetPending(TRUE);
+    }
+    else
+    {
+        inherited::switch2_StartReload();
+    }
+}
+
+void CWeaponMagazinedWShotgun::switch2_AddCartgidge()
+{
+    if (m_bShotgunMode)
+    {
+        PlaySound("sndAddCartridgeS", get_LastFP2());
+        VERIFY(GetState() == eReload);
+        PlayHUDMotion("anm_reload_w_sg_add_cartridge", FALSE, this, GetState());
+        
+        SetPending(TRUE);
+    }
+    else
+    {
+        inherited::switch2_AddCartgidge();
+    }
+}
+
+void CWeaponMagazinedWShotgun::switch2_EndReload()
+{
+    if (m_bShotgunMode)
+    {
+        SetPending(FALSE);
+        if (BeginReloadWasEmpty && m_sounds.FindSoundItem("sndCloseEmptyS", false))
+            PlaySound("sndCloseEmptyS", get_LastFP2());
+        else
+            PlaySound("sndCloseS", get_LastFP2());
+
+        VERIFY(GetState() == eReload);
+        ClickInterruptFlag = false;
+        
+        if (BeginReloadWasEmpty && HudAnimationExist("anm_reload_w_sg_close_empty"))
+            PlayHUDMotion("anm_reload_w_sg_close_empty", FALSE, this, GetState());
+        else
+            PlayHUDMotion("anm_reload_w_sg_close", FALSE, this, GetState());
+    }
+    else
+    {
+        inherited::switch2_EndReload();
+    }
 }
 
 void CWeaponMagazinedWShotgun::OnShot()
