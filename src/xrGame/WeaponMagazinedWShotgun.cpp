@@ -17,7 +17,10 @@
 #	include "phdebug.h"
 #endif
 
-CWeaponMagazinedWShotgun::CWeaponMagazinedWShotgun(ESoundTypes eSoundType) : CWeaponMagazined(eSoundType)
+// we need to retarget all grenade launches to firetraces, then we're good
+
+// maybe this will cause issues since CWeaponAutomaticShotgun doesnt take ESoundType but eh
+CWeaponMagazinedWShotgun::CWeaponMagazinedWShotgun(ESoundTypes eSoundType) : CWeaponAutomaticShotgun()
 {
 	m_ammoType2 = 0;
 	m_bShotgunMode = false;
@@ -32,6 +35,8 @@ BOOL g_aimmode_remember = 1;
 void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 {
 	inherited::Load(section);
+
+    // we deleted inheritance to rocketlauncher so every access is borked now
 	CRocketLauncher::Load(section);
 
 	//// Sounds
@@ -43,7 +48,8 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 
 	if (m_eGrenadeLauncherStatus == ALife::eAddonPermanent)
 	{
-		CRocketLauncher::m_fLaunchSpeed = pSettings->r_float(section, "grenade_vel");
+        // unecessary? no need for launch speed anyway
+		// CRocketLauncher::m_fLaunchSpeed = pSettings->r_float(section, "grenade_vel");
 	}
 	LoadLauncherKoeffs();
 
@@ -62,6 +68,8 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 	}
 
 	iMagazineSize2 = iMagazineSize;
+
+    iMagazineSizeShotgun = pSettings->r_s32(section, "ammo_mag_size_s");
 }
 
 void CWeaponMagazinedWShotgun::net_Destroy()
@@ -80,7 +88,7 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 
 	BOOL l_res = inherited::net_Spawn(DC);
 
-	UpdateGrenadeVisibility(!!iAmmoElapsed);
+    UpdateShotgunVisibility(!!iAmmoElapsed);
 	SetPending(FALSE);
 
 	iAmmoElapsed2 = weapon->a_elapsed_grenades.grenades_count;
@@ -90,24 +98,27 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 
 	if (!IsGameTypeSingle())
 	{
-		if (!m_bGrenadeMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
+        // we need an alternative to getRocketCount
+		if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
 		{
 			m_magazine2.push_back(m_DefaultCartridge2);
 
 			shared_str grenade_name = m_DefaultCartridge2.m_ammoSect;
 			shared_str fake_grenade_name = pSettings->r_string(grenade_name, "fake_grenade_name");
 
-			CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
+            // we need to make an alternative to reload the shotgun server side to replace this
+			 CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
 		}
 	}
 	else
 	{
 		xr_vector<CCartridge>* pM = NULL;
-		bool b_if_grenade_mode = (m_bGrenadeMode && iAmmoElapsed && !getRocketCount());
+        // we need an alternative to getRocketCount
+		bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed && !getRocketCount());
 		if (b_if_grenade_mode)
 			pM = &m_magazine;
 
-		bool b_if_simple_mode = (!m_bGrenadeMode && m_magazine2.size() && !getRocketCount());
+		bool b_if_simple_mode = (!m_bShotgunMode && m_magazine2.size());
 		if (b_if_simple_mode)
 			pM = &m_magazine2;
 
@@ -115,6 +126,7 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 		{
 			shared_str fake_grenade_name = pSettings->r_string(pM->back().m_ammoSect, "fake_grenade_name");
 
+            // we need to make an alternative to reload the shotgun server side to replace this
 			CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
 		}
 	}
@@ -230,7 +242,8 @@ void CWeaponMagazinedWShotgun::PerformSwitchSG()
 
 	UpdateUIScope();
 
-	iMagazineSize = m_bShotgunMode ? 1 : iMagazineSize2;
+    // change magazine size to the correct amount
+	iMagazineSize = m_bShotgunMode ? iMagazineSizeShotgun : iMagazineSize2;
 
 	m_ammoTypes.swap(m_ammoTypes2);
 
@@ -239,6 +252,7 @@ void CWeaponMagazinedWShotgun::PerformSwitchSG()
 
 	m_magazine.swap(m_magazine2);
 	iAmmoElapsed = (int)m_magazine.size();
+}
 
 
 void CWeaponMagazinedWShotgun::SetAmmoElapsed2(int ammo_count)
@@ -291,7 +305,7 @@ bool CWeaponMagazinedWShotgun::Action(u16 cmd, u32 flags)
 		if (flags & CMD_START)
 		{
 			if (iAmmoElapsed)
-				LaunchGrenade();
+                FireShotgun();
 			else
 				Reload();
 
@@ -360,6 +374,7 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 	{
 	case GE_OWNERSHIP_TAKE:
 		{
+            // basically a reload function
 			P.r_u16(id);
 			CRocketLauncher::AttachRocket(id, this);
 		}
@@ -367,7 +382,8 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 	case GE_OWNERSHIP_REJECT:
 	case GE_LAUNCH_ROCKET:
 		{
-			bool bLaunch = (type == GE_LAUNCH_ROCKET);
+            // our fire case
+			bool bLaunch = (type == GE_LAUNCH_ROCKET); // ?? maybe made sense originally and then edited to not make sense
 			P.r_u16(id);
 			CRocketLauncher::DetachRocket(id, bLaunch);
 			if (bLaunch)
@@ -382,98 +398,102 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 	}
 }
 
-void CWeaponMagazinedWShotgun::LaunchGrenade()
+void CWeaponMagazinedWShotgun::FireShotgun()
 {
-	if (!getRocketCount()) return;
-	R_ASSERT(m_bGrenadeMode);
-	{
-#ifdef CROCKETLAUNCHER_CHANGE
-		LPCSTR ammo_name = m_ammoTypes[m_ammoType].c_str();
-		float launch_speed = READ_IF_EXISTS(pSettings, r_float, ammo_name, "ammo_grenade_vel", CRocketLauncher::m_fLaunchSpeed);
-#endif
-		Fvector p1, d;
-		p1.set(get_LastFP2());
-		d.set(get_LastFD());
-		CEntity* E = smart_cast<CEntity*>(H_Parent());
+    // main thing, just use FireStart from CWeaponMagazined since we edit the main ammo type here; not sure if this works actually but w/e
+    inherited::FireStart();
 
-		if (E)
-		{
-			CInventoryOwner* io = smart_cast<CInventoryOwner*>(H_Parent());
-			if (NULL == io->inventory().ActiveItem())
-			{
-				Log("current_state", GetState());
-				Log("next_state", GetNextState());
-				Log("item_sect", cNameSect().c_str());
-				Log("H_Parent", H_Parent()->cNameSect().c_str());
-			}
-			E->g_fireParams(this, p1, d);
-		}
-		if (IsGameTypeSingle())
-			p1.set(get_LastFP2());
+//	if (!getRocketCount()) return;
+//	R_ASSERT(m_bGrenadeMode);
+//	{
+//#ifdef CROCKETLAUNCHER_CHANGE
+//		LPCSTR ammo_name = m_ammoTypes[m_ammoType].c_str();
+//		float launch_speed = READ_IF_EXISTS(pSettings, r_float, ammo_name, "ammo_grenade_vel", CRocketLauncher::m_fLaunchSpeed);
+//#endif
+//		Fvector p1, d;
+//		p1.set(get_LastFP2());
+//		d.set(get_LastFD());
+//		CEntity* E = smart_cast<CEntity*>(H_Parent());
+//
+//		if (E)
+//		{
+//			CInventoryOwner* io = smart_cast<CInventoryOwner*>(H_Parent());
+//			if (NULL == io->inventory().ActiveItem())
+//			{
+//				Log("current_state", GetState());
+//				Log("next_state", GetNextState());
+//				Log("item_sect", cNameSect().c_str());
+//				Log("H_Parent", H_Parent()->cNameSect().c_str());
+//			}
+//			E->g_fireParams(this, p1, d);
+//		}
+//		if (IsGameTypeSingle())
+//			p1.set(get_LastFP2());
+//
+//		Fmatrix launch_matrix;
+//		launch_matrix.identity();
+//		launch_matrix.k.set(d);
+//		Fvector::generate_orthonormal_basis(launch_matrix.k,
+//		                                    launch_matrix.j,
+//		                                    launch_matrix.i);
+//
+//		launch_matrix.c.set(p1);
+//
+//		if (IsGameTypeSingle() && IsZoomed() && smart_cast<CActor*>(H_Parent()) && g_launcher_dynamic_range_zoom)
+//		{
+//			H_Parent()->setEnabled(FALSE);
+//			setEnabled(FALSE);
+//
+//			collide::rq_result RQ;
+//			BOOL HasPick = Level().ObjectSpace.RayPick(p1, d, 300.0f, collide::rqtStatic, RQ, this);
+//
+//			setEnabled(TRUE);
+//			H_Parent()->setEnabled(TRUE);
+//
+//			if (HasPick)
+//			{
+//				Fvector Transference;
+//				Transference.mul(d, RQ.range);
+//				Fvector res[2];
+//#ifdef		DEBUG
+//				//.				DBG_OpenCashedDraw();
+//				//.				DBG_DrawLine(p1,Fvector().add(p1,d),D3DCOLOR_XRGB(255,0,0));
+//#endif
+//#ifdef CROCKETLAUNCHER_CHANGE
+//				u8 canfire0 = TransferenceAndThrowVelToThrowDir(Transference, launch_speed, EffectiveGravity(), res);
+//#else
+//				u8 canfire0 = TransferenceAndThrowVelToThrowDir(Transference,
+//				                                                CRocketLauncher::m_fLaunchSpeed,
+//				                                                EffectiveGravity(),
+//				                                                res);
+//#endif
+//#ifdef DEBUG
+//				//.				if(canfire0>0)DBG_DrawLine(p1,Fvector().add(p1,res[0]),D3DCOLOR_XRGB(0,255,0));
+//				//.				if(canfire0>1)DBG_DrawLine(p1,Fvector().add(p1,res[1]),D3DCOLOR_XRGB(0,0,255));
+//				//.				DBG_ClosedCashedDraw(30000);
+//#endif
+//
+//				if (canfire0 != 0)
+//				{
+//					d = res[0];
+//				};
+//			}
+//		};
+//
+//		d.normalize();
+//#ifdef CROCKETLAUNCHER_CHANGE
+//		d.mul(launch_speed);
+//#else
+//		d.mul(CRocketLauncher::m_fLaunchSpeed);
+//#endif
+//		VERIFY2(_valid(launch_matrix), "CWeaponMagazinedWShotgun::SwitchState. Invalid launch_matrix!");
+//		CRocketLauncher::LaunchRocket(launch_matrix, d, zero_vel);
+//
+//		CExplosiveRocket* pGrenade = smart_cast<CExplosiveRocket*>(getCurrentRocket());
+//		VERIFY(pGrenade);
+//		pGrenade->SetInitiator(H_Parent()->ID());
 
-		Fmatrix launch_matrix;
-		launch_matrix.identity();
-		launch_matrix.k.set(d);
-		Fvector::generate_orthonormal_basis(launch_matrix.k,
-		                                    launch_matrix.j,
-		                                    launch_matrix.i);
-
-		launch_matrix.c.set(p1);
-
-		if (IsGameTypeSingle() && IsZoomed() && smart_cast<CActor*>(H_Parent()) && g_launcher_dynamic_range_zoom)
-		{
-			H_Parent()->setEnabled(FALSE);
-			setEnabled(FALSE);
-
-			collide::rq_result RQ;
-			BOOL HasPick = Level().ObjectSpace.RayPick(p1, d, 300.0f, collide::rqtStatic, RQ, this);
-
-			setEnabled(TRUE);
-			H_Parent()->setEnabled(TRUE);
-
-			if (HasPick)
-			{
-				Fvector Transference;
-				Transference.mul(d, RQ.range);
-				Fvector res[2];
-#ifdef		DEBUG
-				//.				DBG_OpenCashedDraw();
-				//.				DBG_DrawLine(p1,Fvector().add(p1,d),D3DCOLOR_XRGB(255,0,0));
-#endif
-#ifdef CROCKETLAUNCHER_CHANGE
-				u8 canfire0 = TransferenceAndThrowVelToThrowDir(Transference, launch_speed, EffectiveGravity(), res);
-#else
-				u8 canfire0 = TransferenceAndThrowVelToThrowDir(Transference,
-				                                                CRocketLauncher::m_fLaunchSpeed,
-				                                                EffectiveGravity(),
-				                                                res);
-#endif
-#ifdef DEBUG
-				//.				if(canfire0>0)DBG_DrawLine(p1,Fvector().add(p1,res[0]),D3DCOLOR_XRGB(0,255,0));
-				//.				if(canfire0>1)DBG_DrawLine(p1,Fvector().add(p1,res[1]),D3DCOLOR_XRGB(0,0,255));
-				//.				DBG_ClosedCashedDraw(30000);
-#endif
-
-				if (canfire0 != 0)
-				{
-					d = res[0];
-				};
-			}
-		};
-
-		d.normalize();
-#ifdef CROCKETLAUNCHER_CHANGE
-		d.mul(launch_speed);
-#else
-		d.mul(CRocketLauncher::m_fLaunchSpeed);
-#endif
-		VERIFY2(_valid(launch_matrix), "CWeaponMagazinedWShotgun::SwitchState. Invalid launch_matrix!");
-		CRocketLauncher::LaunchRocket(launch_matrix, d, zero_vel);
-
-		CExplosiveRocket* pGrenade = smart_cast<CExplosiveRocket*>(getCurrentRocket());
-		VERIFY(pGrenade);
-		pGrenade->SetInitiator(H_Parent()->ID());
-
+        // we still have a use for this though
 		if (Local() && OnServer())
 		{
 			VERIFY(m_magazine.size());
@@ -481,12 +501,13 @@ void CWeaponMagazinedWShotgun::LaunchGrenade()
 			--iAmmoElapsed;
 			VERIFY((u32) iAmmoElapsed == m_magazine.size());
 
+            // we need to make an alternative to delete the shotgun bullet server side to replace this
 			NET_Packet P;
 			u_EventGen(P, GE_LAUNCH_ROCKET, ID());
 			P.w_u16(getCurrentRocket()->ID());
 			u_EventSend(P);
 		};
-	}
+	//}
 }
 
 void CWeaponMagazinedWShotgun::FireEnd()
@@ -512,10 +533,15 @@ void CWeaponMagazinedWShotgun::ReloadMagazine()
 	inherited::ReloadMagazine();
 
 	//перезарядка подствольного гранатомета
-	if (iAmmoElapsed && !getRocketCount() && m_bGrenadeMode)
+    //"reloading the under-barrel grenade launcher"
+
+    // we need an alternative to shotgun ammo tracking and an alternative to getRocketCount
+    if (iAmmoElapsed && !getRocketCount() && m_bShotgunMode)
 	{
 		shared_str fake_grenade_name = pSettings->r_string(m_ammoTypes[m_ammoType].c_str(), "fake_grenade_name");
 
+        // adds a grenade on the server side
+        // we need to make an alternative to reload the shotgun server side to replace this
 		CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
 	}
 }
@@ -536,7 +562,8 @@ void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
 	}
 
 	inherited::OnStateSwitch(S, oldState);
-	UpdateGrenadeVisibility(!!iAmmoElapsed || S == eReload);
+    // use the correct name
+    UpdateShotgunVisibility(!!iAmmoElapsed || S == eReload);
 }
 
 void CWeaponMagazinedWShotgun::OnAnimationEnd(u32 state)
@@ -573,6 +600,7 @@ void CWeaponMagazinedWShotgun::OnH_B_Independent(bool just_before_destroy)
 
 bool CWeaponMagazinedWShotgun::CanAttach(PIItem pIItem)
 {
+    // there is no CShotgun class, we need to make a new class for the UBSG item or reuse the grenade launcher class
 	CShotgun* pShotgun = smart_cast<CShotgun*>(pIItem);
 
 	if (pShotgun &&
@@ -596,6 +624,7 @@ bool CWeaponMagazinedWShotgun::CanDetach(LPCSTR item_section_name)
 
 bool CWeaponMagazinedWShotgun::Attach(PIItem pIItem, bool b_send_event)
 {
+    // there is no CShotgun class, we need to make a new class for the UBSG item or reuse the grenade launcher class
 	CShotgun* pShotgun = smart_cast<CShotgun*>(pIItem);
 
 	if (pShotgun &&
@@ -659,7 +688,8 @@ void CWeaponMagazinedWShotgun::InitAddons()
 
 	if (ShotgunAttachable())
 	{
-		if (IsShotgunAttachable())
+        // typo, should be IsShotgunAttached instead of IsShotgunAttachable
+		if (IsShotgunAttached())
 		{
 			ApplyLauncherKoeffs();
 		}
@@ -743,7 +773,7 @@ void CWeaponMagazinedWShotgun::PlayAnimHide()
 	VERIFY(GetState() == eHiding);
 
 	if (IsGrenadeLauncherAttached())
-		if (!m_bGrenadeMode)
+		if (!m_bShotgunMode)
 			iAmmoElapsed == 0 && HudAnimationExist("anm_hide_empty_w_sg")
 			? PlayHUDMotion("anm_hide_empty_w_sg", TRUE, this, GetState())
 			: PlayHUDMotion("anm_hide_w_sg", TRUE, this, GetState());
@@ -941,7 +971,7 @@ void CWeaponMagazinedWShotgun::PlayAnimShoot()
 
 void CWeaponMagazinedWShotgun::PlayAnimModeSwitch()
 {
-	if (m_bGrenadeMode)
+	if (m_bShotgunMode)
 		iAmmoElapsed == 0 && HudAnimationExist("anm_switch_g_empty")
 		? PlayHUDMotion("anm_switch_g_empty", TRUE, this, eSwitch)
 		: HudAnimationExist("anm_switch_g") ? PlayHUDMotion("anm_switch_g", TRUE, this, eSwitch) : SwitchState(eSwitch);
@@ -955,7 +985,7 @@ bool CWeaponMagazinedWShotgun::TryPlayAnimBore()
 {
 	if (IsGrenadeLauncherAttached())
 	{
-		if (m_bGrenadeMode)
+		if (m_bShotgunMode)
 		{
 			if (iAmmoElapsed == 0 && HudAnimationExist("anm_bore_empty_g"))
 			{
@@ -990,7 +1020,7 @@ bool CWeaponMagazinedWShotgun::TryPlayAnimBore()
 	return false;
 }
 
-void CWeaponMagazinedWShotgun::UpdateGrenadeVisibility(bool visibility)
+void CWeaponMagazinedWShotgun::UpdateShotgunVisibility(bool visibility)
 {
 	if (!GetHUDmode()) return;
 	HudItemData()->set_bone_visible("grenade", visibility, TRUE);
@@ -999,7 +1029,7 @@ void CWeaponMagazinedWShotgun::UpdateGrenadeVisibility(bool visibility)
 void CWeaponMagazinedWShotgun::save(NET_Packet& output_packet)
 {
 	inherited::save(output_packet);
-	save_data(m_bGrenadeMode, output_packet);
+	save_data(m_bShotgunMode, output_packet);
 	save_data(m_magazine2.size(), output_packet);
 }
 
@@ -1008,11 +1038,11 @@ void CWeaponMagazinedWShotgun::load(IReader& input_packet)
 	inherited::load(input_packet);
 	bool b;
 	load_data(b, input_packet);
-	if (b != m_bGrenadeMode)
+	if (b != m_bShotgunMode)
 		SwitchMode(true);
 
-	if (b && !m_bGrenadeMode) {
-		Msg("![%s] ERROR: CWeaponMagazinedWShotgun::load: m_bGrenadeMode = %d, failed to switch to grenade mode", Name(), m_bGrenadeMode);
+	if (b && !m_bShotgunMode) {
+		Msg("![%s] ERROR: CWeaponMagazinedWShotgun::load: m_bShotgunMode = %d, failed to switch to grenade mode", Name(), m_bShotgunMode);
 		return;
 	}
 
@@ -1034,7 +1064,7 @@ void CWeaponMagazinedWShotgun::load(IReader& input_packet)
 
 void CWeaponMagazinedWShotgun::net_Export(NET_Packet& P)
 {
-	P.w_u8(m_bGrenadeMode ? 1 : 0);
+	P.w_u8(m_bShotgunMode ? 1 : 0);
 
 	inherited::net_Export(P);
 }
@@ -1043,7 +1073,7 @@ void CWeaponMagazinedWShotgun::net_Import(NET_Packet& P)
 {
 	bool NewMode = FALSE;
 	NewMode = !!P.r_u8();
-	if (NewMode != m_bGrenadeMode)
+	if (NewMode != m_bShotgunMode)
 		SwitchMode();
 
 	inherited::net_Import(P);
@@ -1073,7 +1103,7 @@ u8 CWeaponMagazinedWShotgun::GetCurrentHudOffsetIdx()
 		return 4;
 	else if (!IsZoomed())
 		return 0;
-	else if (m_bGrenadeMode)
+	else if (m_bShotgunMode)
 		return 2;
 	else if (m_zoomtype == 1)
 		return 3;
@@ -1086,13 +1116,13 @@ bool CWeaponMagazinedWShotgun::install_upgrade_ammo_class(LPCSTR section, bool t
 	LPCSTR str;
 
 	bool result = process_if_exists(section, "ammo_mag_size", &CInifile::r_s32, iMagazineSize2, test);
-	iMagazineSize = m_bGrenadeMode ? 1 : iMagazineSize2;
+	iMagazineSize = m_bShotgunMode ? iMagazineSizeShotgun : iMagazineSize2;
 
 	//	ammo_class = ammo_5.45x39_fmj, ammo_5.45x39_ap  // name of the ltx-section of used ammo
 	bool result2 = process_if_exists_set(section, "ammo_class", &CInifile::r_string, str, test);
 	if (result2 && !test)
 	{
-		xr_vector<shared_str>& ammo_types = m_bGrenadeMode ? m_ammoTypes2 : m_ammoTypes;
+		xr_vector<shared_str>& ammo_types = m_bShotgunMode ? m_ammoTypes2 : m_ammoTypes;
 		ammo_types.clear();
 		for (int i = 0, count = _GetItemCount(str); i < count; ++i)
 		{
@@ -1118,7 +1148,7 @@ bool CWeaponMagazinedWShotgun::install_upgrade_impl(LPCSTR section, bool test)
 	bool result2 = process_if_exists_set(section, "grenade_class", &CInifile::r_string, str, test);
 	if (result2 && !test)
 	{
-		xr_vector<shared_str>& ammo_types = !m_bGrenadeMode ? m_ammoTypes2 : m_ammoTypes;
+		xr_vector<shared_str>& ammo_types = !m_bShotgunMode ? m_ammoTypes2 : m_ammoTypes;
 		ammo_types.clear();
 		for (int i = 0, count = _GetItemCount(str); i < count; ++i)
 		{
@@ -1132,6 +1162,7 @@ bool CWeaponMagazinedWShotgun::install_upgrade_impl(LPCSTR section, bool test)
 	}
 	result |= result2;
 
+    // may be unnecessary? no launch speed anyway
 	result |= process_if_exists(section, "launch_speed", &CInifile::r_float, m_fLaunchSpeed, test);
 
 	result2 = process_if_exists_set(section, "snd_shoot_grenade", &CInifile::r_string, str, test);
@@ -1178,7 +1209,7 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 	xr_sprintf(int_str, "%d", ae);
 	info.cur_ammo._set(int_str);
 
-	if (bHasBulletsToHide && !m_bGrenadeMode)
+	if (bHasBulletsToHide && !m_bShotgunMode)
 	{
 		last_hide_bullet = ae >= bullet_cnt ? bullet_cnt : bullet_cnt - ae - 1;
 		if (ae == 0) last_hide_bullet = -1;
@@ -1199,7 +1230,7 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 
 	GetSuitableAmmoTotal();
 
-	u32 at_size = m_bGrenadeMode ? m_ammoTypes2.size() : m_ammoTypes.size();
+	u32 at_size = m_bShotgunMode ? m_ammoTypes2.size() : m_ammoTypes.size();
 	if (unlimited_ammo() || at_size == 0)
 	{
 		info.fmj_ammo._set("--");
@@ -1213,8 +1244,8 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 		info.ap_ammo._set("");
 		info.third_ammo._set("");
 
-		u8 ammo_type = m_bGrenadeMode ? m_ammoType2 : m_ammoType;
-		xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(ammo_type) : GetAmmoCount(ammo_type));
+		u8 ammo_type = m_bShotgunMode ? m_ammoType2 : m_ammoType;
+		xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(ammo_type) : GetAmmoCount(ammo_type));
 
 		if (m_ammoType == 0)
 			info.fmj_ammo._set(int_str);
@@ -1230,17 +1261,17 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 
 		if (at_size >= 1)
 		{
-			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(0) : GetAmmoCount(0));
+			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(0) : GetAmmoCount(0));
 			info.fmj_ammo._set(int_str);
 		}
 		if (at_size >= 2)
 		{
-			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(1) : GetAmmoCount(1));
+			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(1) : GetAmmoCount(1));
 			info.ap_ammo._set(int_str);
 		}
 		if (at_size >= 3)
 		{
-			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(2) : GetAmmoCount(2));
+			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(2) : GetAmmoCount(2));
 			info.third_ammo._set(int_str);
 		}
 		//-Alundaio
@@ -1265,7 +1296,7 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 		return false;
 	}
 
-	int total2 = m_bGrenadeMode ? GetAmmoCount(0) : GetAmmoCount2(0);
+	int total2 = m_bShotgunMode ? GetAmmoCount(0) : GetAmmoCount2(0);
 	if (unlimited_ammo())
 		xr_sprintf(int_str, "--");
 	else
@@ -1289,8 +1320,10 @@ int CWeaponMagazinedWShotgun::GetAmmoCount2(u8 ammo2_type) const
 }
 
 #ifdef CROCKETLAUNCHER_CHANGE
+// we need to develop something server side for this
 void CWeaponMagazinedWShotgun::UnloadRocket()
 {
+    // we need an alternative to getRocketCount
 	while (getRocketCount() > 0)
 	{
 		NET_Packet P;
