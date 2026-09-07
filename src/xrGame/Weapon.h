@@ -736,8 +736,8 @@ public:
 	void SetZoomCamMaxAngleHorz(float val) { zoom_cam_recoil.MaxAngleHorz = val; };
 	void SetZoomCamStepAngleHorz(float val) { zoom_cam_recoil.StepAngleHorz = val; };
 
-    void GetCamReturnMode(bool val) { cam_recoil.ReturnMode = val; };
-    void GetZoomCamReturnMode(bool val) { zoom_cam_recoil.ReturnMode = val; };
+    void SetCamReturnMode(bool val) { cam_recoil.ReturnMode = val; };
+    void SetZoomCamReturnMode(bool val) { zoom_cam_recoil.ReturnMode = val; };
 
 protected:
 	//ôàêòîð óâåëè÷åíèÿ äèñïåðñèè ïðè ìàêñèìàëüíîé èçíîøåíîñòè
