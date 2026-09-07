@@ -9,13 +9,16 @@
 // this is fine because CWeaponAutomaticShotgun inherits CWeaponMagazined already, it just allows us to have tri-state reloads as well
 class CWeaponMagazinedWShotgun : public CWeaponAutomaticShotgun
 {
-	typedef CWeaponMagazined inherited;
+    // wrong inherited oops, should be automatic shotgun
+	typedef CWeaponAutomaticShotgun inherited;
 public:
 	CWeaponMagazinedWShotgun(ESoundTypes eSoundType = SOUND_TYPE_WEAPON_SUBMACHINEGUN);
 	virtual ~CWeaponMagazinedWShotgun();
 
 	virtual void Load(LPCSTR section);
 	void LoadLauncherKoeffs();
+    void LoadShotgunParams();
+    void SwapWeaponParams();
 	virtual BOOL net_Spawn(CSE_Abstract* DC);
 	virtual void net_Destroy();
 	virtual void net_Export(NET_Packet& P);

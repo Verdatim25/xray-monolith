@@ -13,11 +13,19 @@
 #include "player_hud.h"
 #include "../build_config_defines.h"
 
+#include "GrenadeLauncher.h"
+
 #ifdef DEBUG
 #	include "phdebug.h"
 #endif
 
-// we need to retarget all grenade launches to firetraces, then we're good
+// to do: load underbarrel shotgun coefficients and swap them with the guns coefficients during swap (stuff like accuracy,
+// rpm, hit_impulse, hit_power (damage), fire_modes, fire_distance, bullet_speed (most important ones) and etc if we want more
+// (hit_type?) (overheat?) (silencer??) (zoom_rotate_time?) (recoil stats?) )
+// also include shell_point, shell_dir, shell_particles variables in the weapon hud config for the shotgun (also technically the underbarrel attachment
+// doesnt need to be a shotgun if we do it right)
+// maybe one smart solution is to ask for a separate section from the main weapon section that just contains the shotgun params (might break something but is very simple)
+// okay this wont work ^^, loading CWeapon also loads hud params, but we can still manually load them here.
 
 // maybe this will cause issues since CWeaponAutomaticShotgun doesnt take ESoundType but eh
 CWeaponMagazinedWShotgun::CWeaponMagazinedWShotgun(ESoundTypes eSoundType) : CWeaponAutomaticShotgun()
@@ -37,7 +45,7 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 	inherited::Load(section);
 
     // we deleted inheritance to rocketlauncher so every access is borked now
-	CRocketLauncher::Load(section);
+	// CRocketLauncher::Load(section);
 
 	//// Sounds
 	m_sounds.LoadSound(section, "snd_shoot_shotgun", "sndShotS", true, m_eSoundShot);
@@ -52,7 +60,12 @@ void CWeaponMagazinedWShotgun::Load(LPCSTR section)
         // unecessary? no need for launch speed anyway
 		// CRocketLauncher::m_fLaunchSpeed = pSettings->r_float(section, "grenade_vel");
 	}
+
+    // koeffs is a base multiplication on the normal gun mode's params
 	LoadLauncherKoeffs();
+
+    // load shotgun params
+    LoadShotgunParams();
 
 	// load ammo classes SECOND (grenade_class)
 	m_ammoTypes2.clear();
@@ -99,7 +112,8 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 	if (!IsGameTypeSingle())
 	{
         // we need an alternative to getRocketCount
-		if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
+		//if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
+        if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !m_magazine2.size() && iAmmoElapsed2)
 		{
 			m_magazine2.push_back(m_DefaultCartridge2);
 
@@ -107,14 +121,15 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 			shared_str fake_grenade_name = pSettings->r_string(grenade_name, "fake_grenade_name");
 
             // we need to make an alternative to reload the shotgun server side to replace this
-			 CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
+			// CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
 		}
 	}
 	else
 	{
 		xr_vector<CCartridge>* pM = NULL;
         // we need an alternative to getRocketCount
-		bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed && !getRocketCount());
+		bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed && !m_magazine2.size());
+        //bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed && !getRocketCount());
 		if (b_if_grenade_mode)
 			pM = &m_magazine;
 
@@ -122,13 +137,13 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 		if (b_if_simple_mode)
 			pM = &m_magazine2;
 
-		if (b_if_grenade_mode || b_if_simple_mode)
-		{
-			shared_str fake_grenade_name = pSettings->r_string(pM->back().m_ammoSect, "fake_grenade_name");
+		//if (b_if_grenade_mode || b_if_simple_mode)
+		//{
+		//	shared_str fake_grenade_name = pSettings->r_string(pM->back().m_ammoSect, "fake_grenade_name");
 
-            // we need to make an alternative to reload the shotgun server side to replace this
-			CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
-		}
+  //          // we need to make an alternative to reload the shotgun server side to replace this
+		//	// CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
+		//}
 	}
 	return l_res;
 }
@@ -163,7 +178,9 @@ void CWeaponMagazinedWShotgun::switch2_Reload()
 		else
 		{
 			//tri state reload stuff i'm not sure i understand
-			inherited::switch2_StartReload();
+
+            // should be this instead i think
+			TriStateReload();
 		}
 	}
 	else
@@ -173,6 +190,9 @@ void CWeaponMagazinedWShotgun::switch2_Reload()
 }
 //Setting up anim and sound refs for tri state reload for UBSG
 //Maybe change anim and sound names tho
+
+// okay so this function never actually gets called, only the CWeaponAutomaticShotgun version gets called. So all these functions below are useless to us. aside
+// from maybe having another class inheriting from here. plus i think just using the inherited version of the code is fine...?
 void CWeaponMagazinedWShotgun::switch2_StartReload()
 {
     if (m_bShotgunMode)
@@ -229,6 +249,42 @@ void CWeaponMagazinedWShotgun::switch2_EndReload()
     {
         inherited::switch2_EndReload();
     }
+}
+
+void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
+{
+    if (!m_bTriStateReload || S != eReload)
+    {
+        inherited::OnStateSwitch(S, oldState);
+        return;
+    }
+
+    CWeapon::OnStateSwitch(S, oldState);
+
+    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    {
+        switch2_EndReload();
+        m_sub_state = eSubstateReloadEnd;
+        return;
+    };
+
+    switch (m_sub_state)
+    {
+    case eSubstateReloadBegin:
+        if (HaveCartridgeInInventory(1))
+            switch2_StartReload();
+        break;
+    case eSubstateReloadInProcess:
+        if (HaveCartridgeInInventory(1))
+            switch2_AddCartgidge();
+        break;
+    case eSubstateReloadEnd:
+        switch2_EndReload();
+        break;
+    case eSubstateReloadInProcessEmptyEnd:
+        switch2_EndReload();
+        break;
+    };
 }
 
 void CWeaponMagazinedWShotgun::OnShot()
@@ -305,6 +361,31 @@ bool CWeaponMagazinedWShotgun::SwitchMode(bool force)
 	return true;
 }
 
+void CWeaponMagazinedWShotgun::SwapWeaponParams()
+{
+    // okay here we swap all the params with one another
+
+    // recoil
+    swap(cam_recoil, m_shotgun_params.cam_recoil);
+    swap(zoom_cam_recoil, m_shotgun_params.zoom_cam_recoil);
+
+    // other params
+    swap(m_crosshair_inertion, m_shotgun_params.crosshair_inertion);
+    swap(m_zoom_params.m_fZoomRotateTime, m_shotgun_params.zoom_rotate_time);
+    swap(fHitImpulse, m_shotgun_params.hit_impulse);
+
+    swap(fireDistance, m_shotgun_params.fire_distance);
+    swap(m_fStartBulletSpeed, m_shotgun_params.bullet_speed);
+    swap(fOneShotTime, m_shotgun_params.fOneShotTime);
+
+    // damage is a little weird
+    // say temp is 1, other is 0.5. 
+    float temp = GetHitPower();
+    swap(temp, m_shotgun_params.l_fHitPower);
+    SetHitPower(temp);
+
+}
+
 extern BOOL useSeparateUBGLKeybind;
 extern BOOL g_launcher_dynamic_range_zoom;
 void CWeaponMagazinedWShotgun::PerformSwitchSG()
@@ -333,6 +414,8 @@ void CWeaponMagazinedWShotgun::PerformSwitchSG()
 
 	swap(m_ammoType, m_ammoType2);
 	swap(m_DefaultCartridge, m_DefaultCartridge2);
+
+    SwapWeaponParams();
 
 	m_magazine.swap(m_magazine2);
 	iAmmoElapsed = (int)m_magazine.size();
@@ -459,8 +542,8 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 	case GE_OWNERSHIP_TAKE:
 		{
             // basically a reload function
-			P.r_u16(id);
-			CRocketLauncher::AttachRocket(id, this);
+			//P.r_u16(id);
+			//CRocketLauncher::AttachRocket(id, this);
 		}
 		break;
 	case GE_OWNERSHIP_REJECT:
@@ -468,8 +551,8 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 		{
             // our fire case
 			bool bLaunch = (type == GE_LAUNCH_ROCKET); // ?? maybe made sense originally and then edited to not make sense
-			P.r_u16(id);
-			CRocketLauncher::DetachRocket(id, bLaunch);
+			//P.r_u16(id);
+			//CRocketLauncher::DetachRocket(id, bLaunch);
 			if (bLaunch)
 			{
 				PlayAnimShoot();
@@ -586,10 +669,10 @@ void CWeaponMagazinedWShotgun::FireShotgun()
 			VERIFY((u32) iAmmoElapsed == m_magazine.size());
 
             // we need to make an alternative to delete the shotgun bullet server side to replace this
-			NET_Packet P;
-			u_EventGen(P, GE_LAUNCH_ROCKET, ID());
-			P.w_u16(getCurrentRocket()->ID());
-			u_EventSend(P);
+			//NET_Packet P;
+			//u_EventGen(P, GE_LAUNCH_ROCKET, ID());
+			//P.w_u16(getCurrentRocket()->ID());
+			//u_EventSend(P);
 		};
 	//}
 }
@@ -620,13 +703,14 @@ void CWeaponMagazinedWShotgun::ReloadMagazine()
     //"reloading the under-barrel grenade launcher"
 
     // we need an alternative to shotgun ammo tracking and an alternative to getRocketCount
-    if (iAmmoElapsed && !getRocketCount() && m_bShotgunMode)
+    //if (iAmmoElapsed && !getRocketCount() && m_bShotgunMode)
+    if (iAmmoElapsed && !m_magazine2.size() && m_bShotgunMode)
 	{
 		shared_str fake_grenade_name = pSettings->r_string(m_ammoTypes[m_ammoType].c_str(), "fake_grenade_name");
 
         // adds a grenade on the server side
         // we need to make an alternative to reload the shotgun server side to replace this
-		CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
+		// CRocketLauncher::SpawnRocket(*fake_grenade_name, this);
 	}
 }
 
@@ -685,7 +769,7 @@ void CWeaponMagazinedWShotgun::OnH_B_Independent(bool just_before_destroy)
 bool CWeaponMagazinedWShotgun::CanAttach(PIItem pIItem)
 {
     // there is no CShotgun class, we need to make a new class for the UBSG item or reuse the grenade launcher class
-	CShotgun* pShotgun = smart_cast<CShotgun*>(pIItem);
+    CGrenadeLauncher* pShotgun = smart_cast<CGrenadeLauncher*>(pIItem);
 
 	if (pShotgun &&
 		ALife::eAddonAttachable == m_eShotgunStatus &&
@@ -709,7 +793,7 @@ bool CWeaponMagazinedWShotgun::CanDetach(LPCSTR item_section_name)
 bool CWeaponMagazinedWShotgun::Attach(PIItem pIItem, bool b_send_event)
 {
     // there is no CShotgun class, we need to make a new class for the UBSG item or reuse the grenade launcher class
-	CShotgun* pShotgun = smart_cast<CShotgun*>(pIItem);
+    CGrenadeLauncher* pShotgun = smart_cast<CGrenadeLauncher*>(pIItem);
 
 	if (pShotgun &&
 		ALife::eAddonAttachable == m_eShotgunStatus &&
@@ -816,6 +900,37 @@ void CWeaponMagazinedWShotgun::ResetLauncherKoeffs()
 {
 	cur_launcher_koef.Reset();
 }
+
+void CWeaponMagazinedWShotgun::LoadShotgunParams()
+{
+    if (m_eShotgunStatus == ALife::eAddonAttachable)
+    {
+        LPCSTR sect = GetShotgunName().c_str();
+
+        // small experiment
+        CWeapon ShotgunParams;
+        // should load all necessary params and reuses code which is always nice
+        ShotgunParams.Load(sect);
+
+        // bullet speed is the ONLY param i cant access, so we do this instead
+        m_shotgun_params.bullet_speed = pSettings->r_float(sect, "bullet_speed");
+
+        m_shotgun_params.cam_recoil = ShotgunParams.cam_recoil;
+        m_shotgun_params.zoom_cam_recoil = ShotgunParams.zoom_cam_recoil;
+
+        // thanks demonized for the exports!!
+        // misc
+        m_shotgun_params.crosshair_inertion = ShotgunParams.GetCrosshairInertion();
+        m_shotgun_params.zoom_rotate_time = ShotgunParams.GetZoomRotateTime();
+        m_shotgun_params.fire_dispersion_base = ShotgunParams.GetFireDispersionScript();
+        m_shotgun_params.l_fHitPower = ShotgunParams.GetHitPower();
+        m_shotgun_params.hit_impulse = ShotgunParams.GetHitImpulse();
+        m_shotgun_params.fire_distance = ShotgunParams.GetFireDistance();
+        m_shotgun_params.fOneShotTime = ShotgunParams.RPMScript();
+
+    }
+}
+
 
 bool CWeaponMagazinedWShotgun::UseScopeTexture()
 {
@@ -1115,6 +1230,9 @@ void CWeaponMagazinedWShotgun::save(NET_Packet& output_packet)
 	inherited::save(output_packet);
 	save_data(m_bShotgunMode, output_packet);
 	save_data(m_magazine2.size(), output_packet);
+
+    // i *think* this should be okay and doesnt affect old saves
+    save_data(m_ammoType2, output_packet);
 }
 
 void CWeaponMagazinedWShotgun::load(IReader& input_packet)
@@ -1133,8 +1251,12 @@ void CWeaponMagazinedWShotgun::load(IReader& input_packet)
 	u32 sz;
 	load_data(sz, input_packet);
 
+    // load correct ammo type
+    u8 Type = 0;
+    load_data(Type, input_packet);
+
 	CCartridge l_cartridge;
-	l_cartridge.Load(m_ammoTypes2[m_ammoType2].c_str(), m_ammoType2);
+	l_cartridge.Load(m_ammoTypes2[Type].c_str(), Type);
 
     if (sz > 0xffff)
     {
@@ -1247,7 +1369,7 @@ bool CWeaponMagazinedWShotgun::install_upgrade_impl(LPCSTR section, bool test)
 	result |= result2;
 
     // may be unnecessary? no launch speed anyway
-	result |= process_if_exists(section, "launch_speed", &CInifile::r_float, m_fLaunchSpeed, test);
+	// result |= process_if_exists(section, "launch_speed", &CInifile::r_float, m_fLaunchSpeed, test);
 
 	result2 = process_if_exists_set(section, "snd_shoot_grenade", &CInifile::r_string, str, test);
 	if (result2 && !test)
@@ -1405,16 +1527,16 @@ int CWeaponMagazinedWShotgun::GetAmmoCount2(u8 ammo2_type) const
 
 #ifdef CROCKETLAUNCHER_CHANGE
 // we need to develop something server side for this
-void CWeaponMagazinedWShotgun::UnloadRocket()
-{
-    // we need an alternative to getRocketCount
-	while (getRocketCount() > 0)
-	{
-		NET_Packet P;
-		u_EventGen(P, GE_OWNERSHIP_REJECT, ID());
-		P.w_u16(u16(getCurrentRocket()->ID()));
-		u_EventSend(P);
-        dropCurrentRocket();
-	}
-}
+//void CWeaponMagazinedWShotgun::UnloadRocket()
+//{
+//    // we need an alternative to getRocketCount
+//	while (getRocketCount() > 0)
+//	{
+//		NET_Packet P;
+//		u_EventGen(P, GE_OWNERSHIP_REJECT, ID());
+//		P.w_u16(u16(getCurrentRocket()->ID()));
+//		u_EventSend(P);
+//        dropCurrentRocket();
+//	}
+//}
 #endif
