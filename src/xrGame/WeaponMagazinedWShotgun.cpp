@@ -178,7 +178,9 @@ void CWeaponMagazinedWShotgun::switch2_Reload()
 		else
 		{
 			//tri state reload stuff i'm not sure i understand
-			inherited::switch2_StartReload();
+
+            // should be this instead i think
+			TriStateReload();
 		}
 	}
 	else
@@ -247,6 +249,42 @@ void CWeaponMagazinedWShotgun::switch2_EndReload()
     {
         inherited::switch2_EndReload();
     }
+}
+
+void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
+{
+    if (!m_bTriStateReload || S != eReload)
+    {
+        inherited::OnStateSwitch(S, oldState);
+        return;
+    }
+
+    CWeapon::OnStateSwitch(S, oldState);
+
+    if (m_magazine.size() == (u32)iMagazineSize || !HaveCartridgeInInventory(1))
+    {
+        switch2_EndReload();
+        m_sub_state = eSubstateReloadEnd;
+        return;
+    };
+
+    switch (m_sub_state)
+    {
+    case eSubstateReloadBegin:
+        if (HaveCartridgeInInventory(1))
+            switch2_StartReload();
+        break;
+    case eSubstateReloadInProcess:
+        if (HaveCartridgeInInventory(1))
+            switch2_AddCartgidge();
+        break;
+    case eSubstateReloadEnd:
+        switch2_EndReload();
+        break;
+    case eSubstateReloadInProcessEmptyEnd:
+        switch2_EndReload();
+        break;
+    };
 }
 
 void CWeaponMagazinedWShotgun::OnShot()
