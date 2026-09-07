@@ -37,7 +37,7 @@ CWeaponMagazinedWShotgun::~CWeaponMagazinedWShotgun()
 {
 }
 
-BOOL g_aimmode_remember = 1;
+extern BOOL g_aimmode_remember;
 
 void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 {
@@ -225,6 +225,33 @@ void CWeaponMagazinedWShotgun::switch2_AddCartgidge()
         inherited::switch2_AddCartgidge();
     }
 }
+
+//i think those are needed for it to not crash (i'm just trying to get smth to compile rn)
+void CWeaponMagazinedWShotgun::switch2_StartAim()
+{
+    inherited::switch2_StartAim();
+}
+
+void CWeaponMagazinedWShotgun::switch2_EndAim()
+{
+    inherited::switch2_EndAim();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimOpenWeapon()
+{
+    inherited::PlayAnimShow();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimAddOneCartridgeWeapon()
+{
+    PlayAnimReload();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimCloseWeapon()
+{
+    inherited::PlayAnimHide();
+}
+
 
 void CWeaponMagazinedWShotgun::switch2_EndReload()
 {

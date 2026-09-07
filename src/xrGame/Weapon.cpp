@@ -1890,6 +1890,11 @@ bool CWeapon::GrenadeLauncherAttachable()
 	return (ALife::eAddonAttachable == m_eGrenadeLauncherStatus);
 }
 
+bool CWeapon::ShotgunAttachable()
+{
+    return(ALife::eAddonAttachable == m_eShotgunStatus);
+}
+
 bool CWeapon::ScopeAttachable()
 {
 	return (ALife::eAddonAttachable == m_eScopeStatus);
@@ -1903,6 +1908,7 @@ bool CWeapon::SilencerAttachable()
 #define WPN_SCOPE "wpn_scope"
 #define WPN_SILENCER "wpn_silencer"
 #define WPN_GRENADE_LAUNCHER "wpn_launcher"
+#define WPN_SHOTGUN_LAUNCHER "wpn_shotgun_launcher"
 #define WPN_SCOPED_HIDE "wpn_scoped_hide"
 #define WPN_SCOPED_UNHIDE "wpn_scoped_unhide"
 
@@ -1914,6 +1920,7 @@ void CWeapon::UpdateHUDAddonsVisibility()
 	static shared_str wpn_scope = WPN_SCOPE;
 	static shared_str wpn_silencer = WPN_SILENCER;
 	static shared_str wpn_grenade_launcher = WPN_GRENADE_LAUNCHER;
+	static shared_str wpn_shotgun_launcher = WPN_SHOTGUN_LAUNCHER;
 	static shared_str wpn_scoped_hide = WPN_SCOPED_HIDE;
 	static shared_str wpn_scoped_unhide = WPN_SCOPED_UNHIDE;
 
@@ -1962,6 +1969,19 @@ void CWeapon::UpdateHUDAddonsVisibility()
 	}
 	else if (m_eGrenadeLauncherStatus == ALife::eAddonPermanent)
 		HudItemData()->set_bone_visible(wpn_grenade_launcher, TRUE, TRUE);
+	//show/hide in Inventory UI i think ??
+	if (ShotgunAttachable())
+	{
+		HudItemData()->set_bone_visible(wpn_shotgun_launcher, IsShotgunAttached());
+	}
+	if (m_eShotgunStatus == ALife::eAddonDisabled)
+	{
+		HudItemData()->set_bone_visible(wpn_shotgun_launcher, FALSE, TRUE);
+	}
+	else if (m_eShotgunStatus == ALife::eAddonPermanent)
+	{
+		HudItemData()->set_bone_visible(wpn_shotgun_launcher, TRUE, TRUE);
+	}
 }
 
 void CWeapon::UpdateAddonsVisibility()
@@ -1969,6 +1989,7 @@ void CWeapon::UpdateAddonsVisibility()
 	static shared_str wpn_scope = WPN_SCOPE;
 	static shared_str wpn_silencer = WPN_SILENCER;
 	static shared_str wpn_grenade_launcher = WPN_GRENADE_LAUNCHER;
+	static shared_str wpn_shotgun_launcher = WPN_SHOTGUN_LAUNCHER;
 
 	IKinematics* pWeaponVisual = smart_cast<IKinematics*>(Visual());
 	R_ASSERT(pWeaponVisual);
@@ -2040,6 +2061,26 @@ void CWeapon::UpdateAddonsVisibility()
 		pWeaponVisual->LL_SetBoneVisible(bone_id, FALSE, TRUE);
 		//		Log("gl", pWeaponVisual->LL_GetBoneVisible			(bone_id));
 	}
+	//setting up bone hiding i think ???
+	if (ShotgunAttachable())
+	{
+		if (IsShotgunAttached())
+		{
+			if (!pWeaponVisual->LL_GetBoneVisible(bone_id))
+				pWeaponVisual->LL_SetBoneVisible(bone_id, TRUE, TRUE);
+		}
+		else
+		{
+			isShotgunActive = false;
+			if (pWeaponVisual->LL_GetBoneVisible(bone_id))
+				pWeaponVisual->LL_SetBoneVisible(bone_id, FALSE, TRUE);
+		}
+	}
+	if (m_eShotgunStatus== ALife::eAddonDisabled && bone_id != BI_NONE &&
+		pWeaponVisual->LL_GetBoneVisible(bone_id))
+		{
+			pWeaponVisual->LL_SetBoneVisible(bone_id, FALSE, TRUE);
+		}
 
 	pWeaponVisual->CalculateBones_Invalidate();
 	pWeaponVisual->CalculateBones(TRUE);
