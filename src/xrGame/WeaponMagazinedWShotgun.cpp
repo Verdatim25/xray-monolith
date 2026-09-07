@@ -12,7 +12,6 @@
 #include "../xrphysics/MathUtils.h"
 #include "player_hud.h"
 #include "../build_config_defines.h"
-
 #include "GrenadeLauncher.h"
 
 #ifdef DEBUG
@@ -38,7 +37,7 @@ CWeaponMagazinedWShotgun::~CWeaponMagazinedWShotgun()
 {
 }
 
-BOOL g_aimmode_remember = 1;
+extern BOOL g_aimmode_remember;
 
 void CWeaponMagazinedWShotgun::Load(LPCSTR section)
 {
@@ -226,6 +225,33 @@ void CWeaponMagazinedWShotgun::switch2_AddCartgidge()
         inherited::switch2_AddCartgidge();
     }
 }
+
+//i think those are needed for it to not crash (i'm just trying to get smth to compile rn)
+void CWeaponMagazinedWShotgun::switch2_StartAim()
+{
+    inherited::switch2_StartAim();
+}
+
+void CWeaponMagazinedWShotgun::switch2_EndAim()
+{
+    inherited::switch2_EndAim();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimOpenWeapon()
+{
+    inherited::PlayAnimShow();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimAddOneCartridgeWeapon()
+{
+    PlayAnimReload();
+}
+
+void CWeaponMagazinedWShotgun::PlayAnimCloseWeapon()
+{
+    inherited::PlayAnimHide();
+}
+
 
 void CWeaponMagazinedWShotgun::switch2_EndReload()
 {
@@ -714,7 +740,7 @@ void CWeaponMagazinedWShotgun::ReloadMagazine()
 	}
 }
 
-void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
+/*void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
 {
 	switch (S)
 	{
@@ -732,7 +758,7 @@ void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
 	inherited::OnStateSwitch(S, oldState);
     // use the correct name
     UpdateShotgunVisibility(!!iAmmoElapsed || S == eReload);
-}
+}*/
 
 void CWeaponMagazinedWShotgun::OnAnimationEnd(u32 state)
 {

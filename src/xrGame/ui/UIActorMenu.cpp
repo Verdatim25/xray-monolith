@@ -14,7 +14,6 @@
 #include "../Weapon.h"
 #include "../WeaponMagazinedWGrenade.h"
 #include "../WeaponAmmo.h"
-#include "../WeaponMagazinedWShotgun.h"
 #include "../Silencer.h"
 #include "../Scope.h"
 #include "../GrenadeLauncher.h"
@@ -763,13 +762,6 @@ bool CUIActorMenu::highlight_addons_for_weapon(PIItem weapon_item, CUICellItem* 
 		ci->m_select_armament = true;
 		return true;
 	}
-	//setting UBSG as highlighted if compatible attachement with gun when hovering over gun
-	CShotgun* PShotgun = smart_cast<CShotgun*>(item);
-	if (CShotgun && weapon_item->CanAttach(pShotgun))
-	{
-		ci->m_select_armament = true;
-		return true;
-	}
 	return false;
 }
 
@@ -815,12 +807,6 @@ void CUIActorMenu::highlight_weapons_for_addon(PIItem addon_item, CUIDragDropLis
 		if (pGrenadeLauncher && weapon->CanAttach(pGrenadeLauncher))
 		{
 			ci->m_select_armament = true;
-			continue;
-		}
-		//highlighting weapon compatible with UBSG when hovering over UBSG in inv
-		if (CShotgun&& weapon->CanAttach(CShotgun))
-		{
-			ci->m_select_armament ) true;
 			continue;
 		}
 	} //for i
