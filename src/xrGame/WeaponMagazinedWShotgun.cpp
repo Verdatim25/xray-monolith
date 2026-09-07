@@ -713,7 +713,7 @@ void CWeaponMagazinedWShotgun::ReloadMagazine()
 	}
 }
 
-void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
+/*void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
 {
 	switch (S)
 	{
@@ -731,7 +731,7 @@ void CWeaponMagazinedWShotgun::OnStateSwitch(u32 S, u32 oldState)
 	inherited::OnStateSwitch(S, oldState);
     // use the correct name
     UpdateShotgunVisibility(!!iAmmoElapsed || S == eReload);
-}
+}*/
 
 void CWeaponMagazinedWShotgun::OnAnimationEnd(u32 state)
 {
