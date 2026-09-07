@@ -12,7 +12,6 @@
 #include "../xrphysics/MathUtils.h"
 #include "player_hud.h"
 #include "../build_config_defines.h"
-
 #include "GrenadeLauncher.h"
 
 #ifdef DEBUG
