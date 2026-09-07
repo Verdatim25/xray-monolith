@@ -70,7 +70,14 @@ public:
 	virtual void PlayAnimModeSwitch();
 	virtual void PlayAnimFireModeSwitch();
 	virtual bool TryPlayAnimBore();
+	//for tri state reload
+	virtual void switch2_StartReload();
+	virtual void switch2_AddCartgidge();
+	virtual void switch2_EndReload();
 
+	virtual void PlayAnimOpenWeapon();
+	virtual void PlayAnimAddOneCartridgeWeapon();
+	virtual void PlayAnimCloseWeapon();
 	//Script exports
 	void SetAmmoElapsed2(int ammo_count);
 	void AmmoTypeForEach2(const ::luabind::functor<bool>& funct);
@@ -120,6 +127,8 @@ public:
 	xr_vector<CCartridge> m_magazine2;
 
 	bool m_bShotgunMode;
+	//adding this to track if it's mag fed or needs tri state reload
+	bool m_bUBSGIsMagFed;
 
 	CCartridge m_DefaultCartridge2;
 	u8 iAmmoElapsed2;
