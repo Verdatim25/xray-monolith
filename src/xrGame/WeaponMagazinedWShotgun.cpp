@@ -98,8 +98,9 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 
 	if (!IsGameTypeSingle())
 	{
-        // we need an alternative to getRocketCount
-		if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
+		//if (!m_bShotgunMode && IsGrenadeLauncherAttached() && !getRocketCount() && iAmmoElapsed2)
+        // getRocketCount is unnecessary
+        if (!m_bShotgunMode && IsGrenadeLauncherAttached() && iAmmoElapsed2)
 		{
 			m_magazine2.push_back(m_DefaultCartridge2);
 
@@ -113,8 +114,8 @@ BOOL CWeaponMagazinedWShotgun::net_Spawn(CSE_Abstract* DC)
 	else
 	{
 		xr_vector<CCartridge>* pM = NULL;
-        // we need an alternative to getRocketCount
-		bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed && !getRocketCount());
+		//bool b_if_grenade_mode = (m_bGrenadeMode && iAmmoElapsed && !getRocketCount());
+        bool b_if_grenade_mode = (m_bShotgunMode && iAmmoElapsed);
 		if (b_if_grenade_mode)
 			pM = &m_magazine;
 
@@ -400,8 +401,10 @@ void CWeaponMagazinedWShotgun::OnEvent(NET_Packet& P, u16 type)
 
 void CWeaponMagazinedWShotgun::FireShotgun()
 {
-    // main thing, just use FireStart from CWeaponMagazined since we edit the main ammo type here; not sure if this works actually but w/e
+    // main thing, just use FireStart from CWeaponMagazined since we edit the main ammo type here
     inherited::FireStart();
+
+    // everything else is basically unecessary since we have no use to care for rocket params
 
 //	if (!getRocketCount()) return;
 //	R_ASSERT(m_bGrenadeMode);
@@ -534,9 +537,10 @@ void CWeaponMagazinedWShotgun::ReloadMagazine()
 
 	//перезарядка подствольного гранатомета
     //"reloading the under-barrel grenade launcher"
+	//if (iAmmoElapsed && !getRocketCount() && m_bGrenadeMode)
 
-    // we need an alternative to shotgun ammo tracking and an alternative to getRocketCount
-    if (iAmmoElapsed && !getRocketCount() && m_bShotgunMode)
+    // we need an alternative to shotgun ammo tracking
+    if (iAmmoElapsed && m_bShotgunMode)
 	{
 		shared_str fake_grenade_name = pSettings->r_string(m_ammoTypes[m_ammoType].c_str(), "fake_grenade_name");
 
@@ -1042,7 +1046,7 @@ void CWeaponMagazinedWShotgun::load(IReader& input_packet)
 		SwitchMode(true);
 
 	if (b && !m_bShotgunMode) {
-		Msg("![%s] ERROR: CWeaponMagazinedWShotgun::load: m_bShotgunMode = %d, failed to switch to grenade mode", Name(), m_bShotgunMode);
+		Msg("![%s] ERROR: CWeaponMagazinedWShotgun::load: m_bGrenadeMode = %d, failed to switch to grenade mode", Name(), m_bShotgunMode);
 		return;
 	}
 
@@ -1230,7 +1234,7 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 
 	GetSuitableAmmoTotal();
 
-	u32 at_size = m_bShotgunMode ? m_ammoTypes2.size() : m_ammoTypes.size();
+	u32 at_size = m_bGrenadeMode ? m_ammoTypes2.size() : m_ammoTypes.size();
 	if (unlimited_ammo() || at_size == 0)
 	{
 		info.fmj_ammo._set("--");
@@ -1244,8 +1248,8 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 		info.ap_ammo._set("");
 		info.third_ammo._set("");
 
-		u8 ammo_type = m_bShotgunMode ? m_ammoType2 : m_ammoType;
-		xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(ammo_type) : GetAmmoCount(ammo_type));
+		u8 ammo_type = m_bGrenadeMode ? m_ammoType2 : m_ammoType;
+		xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(ammo_type) : GetAmmoCount(ammo_type));
 
 		if (m_ammoType == 0)
 			info.fmj_ammo._set(int_str);
@@ -1261,17 +1265,17 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 
 		if (at_size >= 1)
 		{
-			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(0) : GetAmmoCount(0));
+			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(0) : GetAmmoCount(0));
 			info.fmj_ammo._set(int_str);
 		}
 		if (at_size >= 2)
 		{
-			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(1) : GetAmmoCount(1));
+			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(1) : GetAmmoCount(1));
 			info.ap_ammo._set(int_str);
 		}
 		if (at_size >= 3)
 		{
-			xr_sprintf(int_str, "%d", m_bShotgunMode ? GetAmmoCount2(2) : GetAmmoCount(2));
+			xr_sprintf(int_str, "%d", m_bGrenadeMode ? GetAmmoCount2(2) : GetAmmoCount(2));
 			info.third_ammo._set(int_str);
 		}
 		//-Alundaio
@@ -1296,7 +1300,7 @@ bool CWeaponMagazinedWShotgun::GetBriefInfo(II_BriefInfo& info)
 		return false;
 	}
 
-	int total2 = m_bShotgunMode ? GetAmmoCount(0) : GetAmmoCount2(0);
+	int total2 = m_bGrenadeMode ? GetAmmoCount(0) : GetAmmoCount2(0);
 	if (unlimited_ammo())
 		xr_sprintf(int_str, "--");
 	else
@@ -1323,7 +1327,6 @@ int CWeaponMagazinedWShotgun::GetAmmoCount2(u8 ammo2_type) const
 // we need to develop something server side for this
 void CWeaponMagazinedWShotgun::UnloadRocket()
 {
-    // we need an alternative to getRocketCount
 	while (getRocketCount() > 0)
 	{
 		NET_Packet P;
