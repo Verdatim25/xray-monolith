@@ -6,7 +6,6 @@
 #include "scope.h"
 #include "silencer.h"
 #include "grenadelauncher.h"
-#include "underbarrel_shotgun.h"
 #include "inventory.h"
 #include "level.h"
 #include "xr_level_controller.h"

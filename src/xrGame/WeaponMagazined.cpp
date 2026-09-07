@@ -6,7 +6,6 @@
 #include "Scope.h"
 #include "Silencer.h"
 #include "GrenadeLauncher.h"
-#include "underbarrel_shotgun.h"
 #include "inventory.h"
 #include "InventoryOwner.h"
 #include "xrserver_objects_alife_items.h"

@@ -20,7 +20,6 @@
 #include "../silencer.h"
 #include "../scope.h"
 #include "../grenadelauncher.h"
-#include "../underbarrel_shotgun.h"
 #include "../Artefact.h"
 #include "../eatable_item.h"
 #include "../BottleItem.h"

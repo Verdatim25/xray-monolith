@@ -17,7 +17,6 @@
 #include "../Silencer.h"
 #include "../Scope.h"
 #include "../GrenadeLauncher.h"
-#include "../underbarrel_shotgun.h"
 #include "../trade_parameters.h"
 #include "../ActorHelmet.h"
 #include "../CustomOutfit.h"
