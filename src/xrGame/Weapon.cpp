@@ -755,6 +755,9 @@ void CWeapon::Load(LPCSTR section)
 	m_eSilencerStatus = (ALife::EWeaponAddonStatus)pSettings->r_s32(section, "silencer_status");
 	m_eGrenadeLauncherStatus = (ALife::EWeaponAddonStatus)pSettings->r_s32(section, "grenade_launcher_status");
 
+    // just copy for now
+    m_eShotgunStatus = (ALife::EWeaponAddonStatus)pSettings->r_s32(section, "grenade_launcher_status");
+
 	m_altAimPos = READ_IF_EXISTS(pSettings, r_bool, section, "use_alt_aim_hud", false);
 
 	m_zoom_params.m_bZoomEnabled = !!pSettings->r_bool(section, "zoom_enabled");
@@ -826,7 +829,7 @@ void CWeapon::Load(LPCSTR section)
 		m_iGrenadeLauncherY = pSettings->r_s32(section, "grenade_launcher_y");
 	}
 
-		if (m_eShotgunStatus == ALife::eAddonAttachable)
+    if (m_eShotgunStatus == ALife::eAddonAttachable)
 	{
 		m_sShotgunName = pSettings->r_string(section, "shotgun_name");
 		m_iShotgunX = pSettings->r_s32(section, "shotgun_x");
