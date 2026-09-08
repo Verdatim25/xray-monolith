@@ -157,7 +157,7 @@ enum ESMFlags
 	esmUseWeaponBone = 1 << 7,
 
     // verdatim additive animations
-    esmUseBaseAdditive = 1 << 8,
+    esmSkipFirstFrame = 1 << 8,
 };
 
 #if defined(_EDITOR) || defined(_MAX_EXPORT) || defined(_MAYA_EXPORT)

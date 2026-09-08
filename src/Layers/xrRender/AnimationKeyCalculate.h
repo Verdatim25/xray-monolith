@@ -89,11 +89,11 @@ IC void Dequantize(CKey& K, const CBlend& BD, const CMotion& M)
 	float delta = time - float(frame);
 	u32 count = M.get_count();
 
-    // skip first frame if add_from_base is used
+    // skip first frame if SkipFirstFrame is used
     // count is total frames of animaion (constant per motion), frame is global frame 
-    if (BD.Add_From_Base) {
+    if (BD.SkipFirstFrame) {
         if ((((frame + 0) % count) == 0) && count != 0) {
-            Msg("skipping first frame");
+            //Msg("skipping first frame");
             frame++;
         }
     }

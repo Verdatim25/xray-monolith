@@ -105,7 +105,7 @@ protected:
 	CBlend* IBlend_Create();
 private:
 	void IBlendSetup(CBlend& B, u16 part, u8 channel, MotionID motion_ID, BOOL bMixing, float blendAccrue,
-	                 float blendFalloff, float Speed, BOOL noloop, PlayCallback Callback, LPVOID CallbackParam, BOOL AddFromBase = FALSE);
+	                 float blendFalloff, float Speed, BOOL noloop, PlayCallback Callback, LPVOID CallbackParam, BOOL SkipFirstFrame = FALSE);
 	void IFXBlendSetup(CBlend& B, MotionID motion_ID, float blendAccrue, float blendFalloff, float Power, float Speed,
 	                   u16 bone);
 	//.	bool						LoadMotions				(LPCSTR N, IReader *data);

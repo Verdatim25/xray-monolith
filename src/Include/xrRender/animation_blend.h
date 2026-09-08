@@ -36,7 +36,7 @@ public:
 
     // Verdatim, ID of blend for additive animations
     u16 Add_ID;
-    BOOL Add_From_Base;
+    BOOL SkipFirstFrame;
 private:
 	ECurvature blend;
 public:

@@ -367,7 +367,7 @@ float CKinematicsAnimated::get_animation_length(MotionID motion_ID)
 
 void CKinematicsAnimated::IBlendSetup(CBlend& B, u16 part, u8 channel, MotionID motion_ID, BOOL bMixing,
                                       float blendAccrue, float blendFalloff, float Speed, BOOL noloop,
-                                      PlayCallback Callback, LPVOID CallbackParam, BOOL AddFromBase)
+                                      PlayCallback Callback, LPVOID CallbackParam, BOOL SkipFirstFrame)
 {
 	VERIFY(B.channel<MAX_CHANNELS);
 	// Setup blend params
@@ -403,7 +403,7 @@ void CKinematicsAnimated::IBlendSetup(CBlend& B, u16 part, u8 channel, MotionID 
 
     // verdatim, additive animation blend defs, use separate vector for additive blends. if empty space exists, use it. Otherwise push back.
     if (channel == 2){
-         B.Add_From_Base = AddFromBase;
+         B.SkipFirstFrame = SkipFirstFrame;
 
         BlendSVecIt I = blend_additives.begin(), E = blend_additives.end();
         for (int cnt = 0; I != E; I++)
@@ -480,14 +480,14 @@ CBlend* CKinematicsAnimated::LL_PlayCycle(u16 part, MotionID motion_ID, BOOL bMi
 	CBlend* B = IBlend_Create();
 	if (!B) return 0;
 
-    BOOL AddFromBase = FALSE;
+    BOOL SkipFirstFrame = FALSE;
     if (channel == 2) {
         CMotionDef* m_def = m_Motions[motion_ID.slot].motions.motion_def(motion_ID.idx);
-        AddFromBase = m_def->IsAddFromBase();
+        SkipFirstFrame = m_def->SkipFirstFrame();
     }
 	_DBG_SINGLE_USE_MARKER;
 	IBlendSetup(*B, part, channel, motion_ID, bMixing, blendAccrue, blendFalloff, Speed, noloop, Callback,
-	            CallbackParam, AddFromBase);
+	            CallbackParam, SkipFirstFrame);
  
 	for (u32 i = 0; i < P->bones.size(); i++)
 	{

@@ -157,7 +157,7 @@ public:
 	ICF float Power() { return Dequantize(power); }
 	bool StopAtEnd();
     // verdatim, for additive animations
-    bool IsAddFromBase();
+    bool SkipFirstFrame();
 };
 
 struct accel_str_pred

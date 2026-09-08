@@ -381,9 +381,9 @@ bool CMotionDef::StopAtEnd()
 	return !!(flags & esmStopAtEnd);
 }
 
-bool CMotionDef::IsAddFromBase()
+bool CMotionDef::SkipFirstFrame()
 {
-    return !!(flags & esmUseBaseAdditive);
+    return !!(flags & esmSkipFirstFrame);
 }
 
 bool shared_motions::create(shared_str key, IReader* data, vecBones* bones)
