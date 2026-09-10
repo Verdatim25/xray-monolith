@@ -602,7 +602,7 @@ u32 script_attachment::PlayMotion(LPCSTR name, bool mixin, float speed)
 	return length;
 }
 
-::luabind::object script_attachment::PlayMotion_Add(LPCSTR name, bool bMixIn, u32 state, float speed = 0.f, float end = 0.f, u16 mode = 1)
+::luabind::object script_attachment::PlayMotion_Add(LPCSTR name, bool bMixIn, float speed)
 {
     IKinematicsAnimated* k = renderable.visual->dcast_PKinematicsAnimated();
 
@@ -624,19 +624,6 @@ u32 script_attachment::PlayMotion(LPCSTR name, bool mixin, float speed)
         CBlend* B = k->PlayCycle(pid, M2, bMixIn, 0, 0, 0, speed);
         table[pid+1] = B->Add_ID;
     }
-
-    const CMotionDef* md;
-    u32 length = motion_length(M2, md, speed);
-
-    if (length > 0)
-    {
-        m_bStopAtEndAnimIsRunning = true;
-        m_anim_end = Device.dwTimeGlobal + length;
-    }
-    else
-        m_bStopAtEndAnimIsRunning = false;
-
-    m_current_motion = name;
 
     k->UpdateTracks();
     m_kinematics->CalculateBones_Invalidate();
