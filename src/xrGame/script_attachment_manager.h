@@ -190,6 +190,10 @@ public:
 
 	u32 PlayMotion(LPCSTR name, bool mixin = true, float speed = 1.f);
 	u32 motion_length(const MotionID& M, const CMotionDef*& md, float speed);
+    // additive animations
+    ::luabind::object PlayMotion_Add(LPCSTR M, bool bMixIn, u32 state, float speed = 0.f, float end = 0.f, u16 mode = 1);
+    void ClearSpecificBlends(::luabind::object table = ::luabind::newtable(ai().script_engine().lua()));
+    void ClearBlends();
 	
 	u16 bone_id(LPCSTR bone_name);
 	LPCSTR bone_name(u16 bone_id);
