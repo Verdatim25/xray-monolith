@@ -314,7 +314,7 @@ void CKinematicsAnimated::LL_CloseAddCycles(u16 part, u8 mask_channel /*= (1<<0)
         CBlend& B = *(*I);
         if (!(mask_channel & (1 << B.channel)))
         {
-            Msg("channel %d is masked", 1<<B.channel);
+            //Msg("channel %d is masked", 1<<B.channel);
             continue;
         }
         //B.blend = CBlend::eFREE_SLOT;
@@ -322,7 +322,7 @@ void CKinematicsAnimated::LL_CloseAddCycles(u16 part, u8 mask_channel /*= (1<<0)
         // clear blend if blend is not provided or if it matches the current blend's id
         if ((BlendID == 0) || B.Add_ID == BlendID)
         {
-            Msg("clearing blend");
+            //Msg("clearing blend");
             B.set_free_state();
 
             CPartDef* P = (*m_Partition)[B.bone_or_part];
@@ -340,7 +340,7 @@ void CKinematicsAnimated::LL_CloseAddCycles(u16 part, u8 mask_channel /*= (1<<0)
         else
         {
             CBlend& B = *(*I);;
-            Msg("BlendID [%d] does not match current Add_ID [%d]", BlendID, B.Add_ID);
+            //Msg("BlendID [%d] does not match current Add_ID [%d]", BlendID, B.Add_ID);
         }
     }
     //blend_cycles[part].clear	(); // ?
